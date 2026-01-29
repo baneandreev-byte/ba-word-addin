@@ -7,7 +7,7 @@
   xsi:type="TaskPaneApp">
 
   <Id>10118cd9-088f-498a-aae7-05c50d6d258a</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.0.0.1</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
@@ -16,12 +16,18 @@
 
   <IconUrl DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/ba-word-addin/assets/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/ba-word-addin/assets/icon-80.png"/>
-
   <SupportUrl DefaultValue="https://biroa.rs"/>
 
   <AppDomains>
     <AppDomain>https://baneandreev-byte.github.io</AppDomain>
   </AppDomains>
+
+  <!-- Requirements in root (good practice; helps validation) -->
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="WordApi"/>
+    </Sets>
+  </Requirements>
 
   <Hosts>
     <Host Name="Document"/>
@@ -36,6 +42,13 @@
   <VersionOverrides
     xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
     xsi:type="VersionOverridesV1_0">
+
+    <!-- Requirements are often expected inside VersionOverrides too -->
+    <Requirements>
+      <bt:Sets DefaultMinVersion="1.1">
+        <bt:Set Name="WordApi"/>
+      </bt:Sets>
+    </Requirements>
 
     <Hosts>
       <Host xsi:type="Document">
@@ -67,6 +80,11 @@
     </Hosts>
 
     <Resources>
+      <!-- This is the missing piece many admin-center validations require -->
+      <bt:Hosts>
+        <bt:Host Name="Document"/>
+      </bt:Hosts>
+
       <bt:Images>
         <bt:Image id="Icon.16" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/ba-word-addin/assets/icon-16.png"/>
         <bt:Image id="Icon.32" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/ba-word-addin/assets/icon-32.png"/>
@@ -88,3 +106,4 @@
     </Resources>
   </VersionOverrides>
 </OfficeApp>
+
