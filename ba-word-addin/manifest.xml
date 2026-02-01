@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <OfficeApp
   xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -22,69 +22,57 @@
     <AppDomain>https://baneandreev-byte.github.io</AppDomain>
   </AppDomains>
 
-  <!-- Requirements in root (good practice; helps validation) -->
-  <Requirements>
-    <Sets DefaultMinVersion="1.1">
-      <Set Name="WordApi"/>
-    </Sets>
-  </Requirements>
-
   <Hosts>
     <Host Name="Document"/>
   </Hosts>
-
-  <Permissions>ReadWriteDocument</Permissions>
 
   <DefaultSettings>
     <SourceLocation DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/ba-word-addin/taskpane.html"/>
   </DefaultSettings>
 
-  <VersionOverrides
-    xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
-    xsi:type="VersionOverridesV1_0">
+  <Permissions>ReadWriteDocument</Permissions>
 
-    <!-- Requirements are often expected inside VersionOverrides too -->
-    <Requirements>
+  <ov:VersionOverrides xsi:type="VersionOverridesV1_0">
+    <ov:Requirements>
       <bt:Sets DefaultMinVersion="1.1">
         <bt:Set Name="WordApi"/>
       </bt:Sets>
-    </Requirements>
+    </ov:Requirements>
 
-    <Hosts>
-      <Host xsi:type="Document">
-        <DesktopFormFactor>
-          <ExtensionPoint xsi:type="PrimaryCommandSurface">
-            <OfficeTab id="TabHome">
-              <Group id="BiroA.Group">
-                <Label resid="BiroA.Group.Label"/>
-                <Control xsi:type="Button" id="BiroA.Button">
-                  <Label resid="BiroA.Button.Label"/>
-                  <Supertip>
-                    <Title resid="BiroA.Button.Label"/>
-                    <Description resid="BiroA.Button.Desc"/>
-                  </Supertip>
-                  <Icon>
+    <ov:Hosts>
+      <ov:Host xsi:type="Document">
+        <ov:DesktopFormFactor>
+
+          <ov:FunctionFile resid="Commands.Url"/>
+
+          <ov:ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <ov:OfficeTab id="TabHome">
+              <ov:Group id="BiroA.Group">
+                <ov:Label resid="BiroA.Group.Label"/>
+                <ov:Control xsi:type="Button" id="BiroA.Button">
+                  <ov:Label resid="BiroA.Button.Label"/>
+                  <ov:Supertip>
+                    <ov:Title resid="BiroA.Button.Label"/>
+                    <ov:Description resid="BiroA.Button.Desc"/>
+                  </ov:Supertip>
+                  <ov:Icon>
                     <bt:Image size="16" resid="Icon.16"/>
                     <bt:Image size="32" resid="Icon.32"/>
                     <bt:Image size="80" resid="Icon.80"/>
-                  </Icon>
-                  <Action xsi:type="ShowTaskpane">
-                    <SourceLocation resid="Taskpane.Url"/>
-                  </Action>
-                </Control>
-              </Group>
-            </OfficeTab>
-          </ExtensionPoint>
-        </DesktopFormFactor>
-      </Host>
-    </Hosts>
+                  </ov:Icon>
+                  <ov:Action xsi:type="ShowTaskpane">
+                    <ov:SourceLocation resid="Taskpane.Url"/>
+                  </ov:Action>
+                </ov:Control>
+              </ov:Group>
+            </ov:OfficeTab>
+          </ov:ExtensionPoint>
 
-    <Resources>
-      <!-- This is the missing piece many admin-center validations require -->
-      <bt:Hosts>
-        <bt:Host Name="Document"/>
-      </bt:Hosts>
+        </ov:DesktopFormFactor>
+      </ov:Host>
+    </ov:Hosts>
 
+    <ov:Resources>
       <bt:Images>
         <bt:Image id="Icon.16" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/ba-word-addin/assets/icon-16.png"/>
         <bt:Image id="Icon.32" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/ba-word-addin/assets/icon-32.png"/>
@@ -93,6 +81,7 @@
 
       <bt:Urls>
         <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/ba-word-addin/taskpane.html"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/ba-word-addin/commands.html"/>
       </bt:Urls>
 
       <bt:ShortStrings>
@@ -103,7 +92,6 @@
       <bt:LongStrings>
         <bt:String id="BiroA.Button.Desc" DefaultValue="Upravljanje pametnim poljima"/>
       </bt:LongStrings>
-    </Resources>
-  </VersionOverrides>
+    </ov:Resources>
+  </ov:VersionOverrides>
 </OfficeApp>
-
