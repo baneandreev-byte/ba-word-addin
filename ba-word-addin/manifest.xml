@@ -14,8 +14,8 @@
   <DisplayName DefaultValue="BiroA Word dodatak"/>
   <Description DefaultValue="Pametna polja za Word dokumente"/>
 
-  <IconUrl DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/assets/icon-32.png"/>
-  <HighResolutionIconUrl DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/assets/icon-80.png"/>
+  <IconUrl DefaultValue="https://baneandreev-byte.github.io/assets/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://baneandreev-byte.github.io/assets/icon-80.png"/>
   <SupportUrl DefaultValue="https://biroa.rs"/>
 
   <AppDomains>
@@ -27,7 +27,7 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html"/>
+    <SourceLocation DefaultValue="https://baneandreev-byte.github.io/taskpane.html"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -72,13 +72,13 @@
 
     <ov:Resources>
       <bt:Images>
-        <bt:Image id="Icon.16" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/assets/icon-16.png"/>
-        <bt:Image id="Icon.32" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/assets/icon-32.png"/>
-        <bt:Image id="Icon.80" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/assets/icon-80.png"/>
+        <bt:Image id="Icon.16" DefaultValue="https://baneandreev-byte.github.io/assets/icon-16.png"/>
+        <bt:Image id="Icon.32" DefaultValue="https://baneandreev-byte.github.io/assets/icon-32.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://baneandreev-byte.github.io/assets/icon-80.png"/>
       </bt:Images>
 
       <bt:Urls>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/taskpane.html"/>
       </bt:Urls>
 
       <bt:ShortStrings>
