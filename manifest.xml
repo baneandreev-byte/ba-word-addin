@@ -19,7 +19,7 @@
   <SupportUrl DefaultValue="https://biroa.rs"/>
 
   <AppDomains>
-    <AppDomain>https://baneandreev-byte.github.io</AppDomain>
+    <AppDomain>https://baneandreev-byte.github.io/ba-word-addin/</AppDomain>
   </AppDomains>
 
   <Hosts>
