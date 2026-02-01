@@ -7,7 +7,7 @@
   xsi:type="TaskPaneApp">
 
   <Id>10118cd9-088f-498a-aae7-05c50d6d258a</Id>
-  <Version>1.0.0.2</Version>
+  <Version>1.0.0.3</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
@@ -42,8 +42,6 @@
     <ov:Hosts>
       <ov:Host xsi:type="Document">
         <ov:DesktopFormFactor>
-
-          <ov:FunctionFile resid="Commands.Url"/>
 
           <ov:ExtensionPoint xsi:type="PrimaryCommandSurface">
             <ov:OfficeTab id="TabHome">
@@ -81,7 +79,6 @@
 
       <bt:Urls>
         <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/ba-word-addin/taskpane.html"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/ba-word-addin/commands.html"/>
       </bt:Urls>
 
       <bt:ShortStrings>
