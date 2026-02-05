@@ -1,435 +1,663 @@
 /* global Office, Word */
 
 let rows = [
-  { id: 1, field: "", value: "", type: "text", format: "text:auto" },
-  { id: 2, field: "", value: "", type: "text", format: "text:auto" },
-  { id: 3, field: "", value: "", type: "text", format: "text:auto" },
-  { id: 4, field: "", value: "", type: "text", format: "text:auto" },
+  { id: 1, field: "", value: "" },
+  { id: 2, field: "", value: "" },
+  { id: 3, field: "", value: "" },
+  { id: 4, field: "", value: "" },
 ];
 
-let selectedRowId = rows[0]?.id ?? null;
+let selectedRowId = null;
+let saveTimer = null;
+let statusTimer = null;
 
-// ---------- DOM helpers ----------
-function el(id) {
+function $(id) {
   return document.getElementById(id);
 }
 
-function elMaybe(id) {
-  return document.getElementById(id) || null;
-}
-
-function setStatus(msg, kind = "info") {
-  const s = elMaybe("status");
-  if (!s) return;
-  s.textContent = msg;
-  s.className = `status ${kind}`;
-  // auto hide after a bit
-  clearTimeout(setStatus._t);
-  setStatus._t = setTimeout(() => {
-    s.textContent = "";
-    s.className = "status";
-  }, 3500);
-}
-
-// ---------- row helpers ----------
-function ensureDefaults(r) {
-  return {
-    id: r.id,
-    field: r.field ?? "",
-    value: r.value ?? "",
-    type: r.type ?? "text",
-    format: r.format ?? "text:auto",
-  };
-}
-
 function normalizeKey(s) {
-  return String(s ?? "").trim();
+  return (s || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^A-Z0-9_]/g, "");
 }
 
-function token(key) {
-  return `{${key}}`;
+function showStatus(msg, autohide) {
+  const el = $("status");
+  if (!el) return;
+
+  el.textContent = msg || "";
+  el.style.display = msg ? "block" : "none";
+
+  if (statusTimer) {
+    clearTimeout(statusTimer);
+    statusTimer = null;
+  }
+
+  if (autohide && msg) {
+    statusTimer = window.setTimeout(() => {
+      el.style.display = "none";
+      el.textContent = "";
+    }, 4000);
+  }
 }
 
-// ---------- tag format in content control ----------
-// Tag format: BA_FIELD|key=<KEY>|type=<TYPE>|format=<FORMAT>
-function makeTag(key, type, format) {
-  const k = normalizeKey(key);
-  const t = (type || "text").trim();
-  const f = (format || "text:auto").trim();
-  return `BA_FIELD|key=${k}|type=${t}|format=${f}`;
+/* =========================
+   TABLE
+   ========================= */
+
+function getMap() {
+  const m = new Map();
+  for (const r of rows) {
+    const k = normalizeKey(r.field);
+    if (k) m.set(k, (r.value == null ? "" : r.value));
+  }
+  return m;
+}
+
+function addRow() {
+  const nextId = Math.max(...rows.map((r) => r.id), 0) + 1;
+  rows.push({ id: nextId, field: "", value: "" });
+  if (selectedRowId == null) selectedRowId = nextId;
+  renderRows();
+  triggerAutoSave();
+}
+
+function deleteRow(id) {
+  if (rows.length <= 1) {
+    showStatus("⚠ Mora ostati bar jedan red u tabeli", true);
+    return;
+  }
+  rows = rows.filter((r) => r.id !== id);
+  if (selectedRowId === id) {
+    selectedRowId = rows[0] ? rows[0].id : null;
+  }
+  renderRows();
+  triggerAutoSave();
+}
+
+function updateRow(id, key, val) {
+  rows = rows.map((r) => (r.id === id ? { ...r, [key]: val } : r));
+  triggerAutoSave();
+}
+
+function getSelectedKey() {
+  if (selectedRowId == null) return null;
+  const r = rows.find((x) => x.id === selectedRowId);
+  const key = normalizeKey((r && r.field) || "");
+  return key || null;
+}
+
+function renderRows() {
+  const container = $("rows");
+  if (!container) return;
+  container.innerHTML = "";
+
+  rows.forEach((r) => {
+    const row = document.createElement("div");
+    row.className = "row";
+
+    if (selectedRowId === r.id) {
+      row.style.background = "#eff6ff";
+    }
+
+    const c1 = document.createElement("div");
+    c1.className = "cell";
+    const i1 = document.createElement("input");
+    i1.value = r.field;
+    i1.placeholder = "Unesite polje...";
+    i1.addEventListener("focus", () => {
+      if (selectedRowId !== r.id) {
+        selectedRowId = r.id;
+        renderRows();
+      }
+    });
+    i1.addEventListener("input", (e) => updateRow(r.id, "field", e.target.value));
+    c1.appendChild(i1);
+
+    const c2 = document.createElement("div");
+    c2.className = "cell";
+    const i2 = document.createElement("input");
+    i2.value = r.value;
+    i2.placeholder = "Unesite odgovor...";
+    i2.addEventListener("focus", () => {
+      if (selectedRowId !== r.id) {
+        selectedRowId = r.id;
+        renderRows();
+      }
+    });
+    i2.addEventListener("input", (e) => updateRow(r.id, "value", e.target.value));
+    c2.appendChild(i2);
+
+    const c3 = document.createElement("div");
+    c3.className = "del";
+    const b = document.createElement("button");
+    b.textContent = "×";
+    b.title = "Obriši red (Delete)";
+    b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      deleteRow(r.id);
+    });
+    c3.appendChild(b);
+
+    row.appendChild(c1);
+    row.appendChild(c2);
+    row.appendChild(c3);
+    container.appendChild(row);
+  });
+}
+
+/* =========================
+   TAG encoding: KEY|TYPE|FMT
+   TYPE: T (text), D (date), N (number)
+   ========================= */
+
+function makeTag(key, type, fmt) {
+  return `${key}|${type}|${fmt}`;
 }
 
 function parseTag(tag) {
-  const s = String(tag || "");
-  if (!s.startsWith("BA_FIELD|")) return null;
-  const parts = s.split("|").slice(1);
-  const out = {};
-  for (const p of parts) {
-    const [k, ...rest] = p.split("=");
-    out[k] = rest.join("=");
+  const parts = (tag || "").split("|");
+  if (parts.length < 3) return null;
+
+  const key = normalizeKey(parts[0]);
+  const type = parts[1];
+  const fmt = parts.slice(2).join("|");
+
+  if (!key) return null;
+  if (type !== "T" && type !== "D" && type !== "N") return null;
+
+  return { key, type, fmt };
+}
+
+/* =========================
+   FORMAT OPTIONS + MODAL
+   ========================= */
+
+const FORMAT_OPTIONS = {
+  T: [
+    { value: "AS_IS", label: "Kao uneto" },
+    { value: "UPPER", label: "VELIKA SLOVA" },
+    { value: "LOWER", label: "mala slova" },
+    { value: "SENTENCE", label: "Rečenica (prvo veliko)" },
+  ],
+  D: [
+    { value: "DD_MM_YYYY", label: "dd.mm.yyyy" },
+    { value: "DD", label: "dan (dd)" },
+    { value: "MM", label: "mesec broj (mm)" },
+    { value: "YYYY", label: "godina (yyyy)" },
+    { value: "MONTH_TEXT", label: "mesec tekst (januar...)" },
+    { value: "MONTH_TEXT_YEAR", label: "April 2025" },
+    { value: "DD_MONTH_TEXT_YYYY", label: "15. april 2025" },
+  ],
+  N: [
+    { value: "PLAIN_0", label: "broj (0 dec)" },
+    { value: "PLAIN_2", label: "broj (2 dec)" },
+    { value: "CUR_EUR_2", label: "EUR (2 dec)" },
+    { value: "CUR_RSD_0", label: "RSD (0 dec)" },
+    { value: "CUR_USD_2", label: "USD (2 dec)" },
+  ],
+};
+
+function showOverlay(show) {
+  const el = $("modalOverlay");
+  if (!el) return;
+  el.style.display = show ? "flex" : "none";
+}
+
+function fillFormatOptions(type) {
+  const sel = $("modalFormat");
+  if (!sel) return;
+  sel.innerHTML = "";
+
+  const opts = FORMAT_OPTIONS[type] || [];
+  for (const o of opts) {
+    const opt = document.createElement("option");
+    opt.value = o.value;
+    opt.textContent = o.label;
+    sel.appendChild(opt);
   }
-  if (!out.key) return null;
-  return {
-    key: out.key,
-    type: out.type || "text",
-    format: out.format || "text:auto",
+}
+
+async function openInsertModal(key) {
+  const nameEl = $("modalFieldName");
+  const typeEl = $("modalType");
+  const fmtEl = $("modalFormat");
+  const okBtn = $("modalOk");
+  const cancelBtn = $("modalCancel");
+
+  if (!nameEl || !typeEl || !fmtEl || !okBtn || !cancelBtn) {
+    showStatus("⚠ Modal elementi nisu pronađeni u HTML-u", true);
+    return null;
+  }
+
+  nameEl.textContent = key;
+
+  typeEl.value = "T";
+  fillFormatOptions("T");
+
+  const onTypeChange = () => fillFormatOptions(typeEl.value);
+  typeEl.addEventListener("change", onTypeChange);
+
+  showOverlay(true);
+
+  return await new Promise((resolve) => {
+    const cleanup = () => {
+      showOverlay(false);
+      typeEl.removeEventListener("change", onTypeChange);
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+    };
+
+    const onOk = () => {
+      const type = typeEl.value;
+      const fmt = fmtEl.value;
+      cleanup();
+      resolve({ type, fmt });
+    };
+
+    const onCancel = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+  });
+}
+
+/* ===== Confirm modal (Today date) ===== */
+
+function showConfirmOverlay(show) {
+  const el = $("confirmOverlay");
+  if (!el) return;
+  el.style.display = show ? "flex" : "none";
+}
+
+async function confirmToday(key) {
+  const textEl = $("confirmText");
+  const yesBtn = $("confirmYes");
+  const noBtn = $("confirmNo");
+
+  if (!textEl || !yesBtn || !noBtn) {
+    // fallback: confirm()
+    return window.confirm(`Polje "${key}" je prazno u tabeli.\nDa li je to današnji datum?`);
+  }
+
+  textEl.textContent = `Polje "${key}" je prazno u tabeli.\nDa li je to današnji datum?`;
+  showConfirmOverlay(true);
+
+  return await new Promise((resolve) => {
+    const cleanup = () => {
+      showConfirmOverlay(false);
+      yesBtn.removeEventListener("click", onYes);
+      noBtn.removeEventListener("click", onNo);
+    };
+
+    const onYes = () => { cleanup(); resolve(true); };
+    const onNo = () => { cleanup(); resolve(false); };
+
+    yesBtn.addEventListener("click", onYes);
+    noBtn.addEventListener("click", onNo);
+  });
+}
+
+/* =========================
+   FORMATTING
+   ========================= */
+
+function toSentenceCase(s) {
+  const t = (s || "").trim();
+  if (!t) return "";
+  return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+}
+
+function formatText(raw, fmt) {
+  const v = raw == null ? "" : String(raw);
+  switch (fmt) {
+    case "UPPER": return v.toUpperCase();
+    case "LOWER": return v.toLowerCase();
+    case "SENTENCE": return toSentenceCase(v);
+    case "AS_IS":
+    default: return v;
+  }
+}
+
+function parseDateLoose(raw) {
+  const s = (raw || "").trim();
+  if (!s) return null;
+
+  const m1 = s.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
+  if (m1) {
+    const dd = Number(m1[1]);
+    const mm = Number(m1[2]);
+    const yyyy = Number(m1[3]);
+    const d = new Date(yyyy, mm - 1, dd);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  const m2 = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m2) {
+    const yyyy = Number(m2[1]);
+    const mm = Number(m2[2]);
+    const dd = Number(m2[3]);
+    const d = new Date(yyyy, mm - 1, dd);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  const d3 = new Date(s);
+  if (!isNaN(d3.getTime())) return d3;
+
+  return null;
+}
+
+const MONTHS_SR_LAT = [
+  "januar","februar","mart","april","maj","jun","jul","avgust","septembar","oktobar","novembar","decembar"
+];
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function formatDate(raw, fmt) {
+  const d = parseDateLoose(raw);
+  if (!d) return raw == null ? "" : String(raw);
+
+  const dd = d.getDate();
+  const mm = d.getMonth() + 1;
+  const yyyy = d.getFullYear();
+  const m = MONTHS_SR_LAT[mm - 1] || "";
+
+  switch (fmt) {
+    case "DD": return pad2(dd);
+    case "MM": return pad2(mm);
+    case "YYYY": return String(yyyy);
+    case "MONTH_TEXT": return m;
+    case "MONTH_TEXT_YEAR": {
+      const cap = m ? m.charAt(0).toUpperCase() + m.slice(1) : "";
+      return `${cap} ${yyyy}`;
+    }
+    case "DD_MONTH_TEXT_YYYY":
+      return `${dd}. ${m} ${yyyy}`;
+    case "DD_MM_YYYY":
+    default:
+      return `${pad2(dd)}.${pad2(mm)}.${yyyy}`;
+  }
+}
+
+function formatNumber(raw, fmt) {
+  const s = (raw == null ? "" : String(raw)).toString().trim();
+  if (!s) return "";
+
+  const norm = s.replace(/\s/g, "").replace(",", ".");
+  const n = Number(norm);
+  if (isNaN(n)) return raw == null ? "" : String(raw);
+
+  const m = fmt.match(/^(PLAIN|CUR)_(EUR|RSD|USD)?_(\d)$/);
+  if (!m) return raw == null ? "" : String(raw);
+
+  const kind = m[1];
+  const cur = m[2] || "";
+  const dec = Number(m[3]);
+
+  const formatted = n.toLocaleString("sr-RS", {
+    minimumFractionDigits: dec,
+    maximumFractionDigits: dec,
+  });
+
+  if (kind === "CUR") {
+    const sym = cur === "EUR" ? "€" : (cur === "USD" ? "$" : (cur === "RSD" ? "RSD" : ""));
+    return sym ? `${formatted} ${sym}` : formatted;
+  }
+
+  return formatted;
+}
+
+function applyFormat(raw, type, fmt) {
+  if (type === "T") return formatText(raw, fmt);
+  if (type === "D") return formatDate(raw, fmt);
+  return formatNumber(raw, fmt);
+}
+
+function todayRawDDMMYYYY() {
+  const d = new Date();
+  const dd = pad2(d.getDate());
+  const mm = pad2(d.getMonth() + 1);
+  const yyyy = d.getFullYear();
+  return `${dd}.${mm}.${yyyy}`;
+}
+
+/* =========================
+   PERSISTENCE (Custom XML)
+   ========================= */
+
+const XML_NS = "biroa/fields/v2";
+
+function escapeXml(s) {
+  return (s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+async function saveToDocument() {
+  try {
+    await Word.run(async (context) => {
+      const parts = context.document.customXmlParts.getByNamespace(XML_NS);
+      parts.load("items");
+      await context.sync();
+      parts.items.forEach((p) => p.delete());
+      await context.sync();
+
+      let xml = `<BiroA xmlns="${XML_NS}">`;
+      for (const r of rows) {
+        const key = normalizeKey(r.field);
+        if (!key) continue;
+        xml += `<field name="${escapeXml(key)}">`;
+        xml += `<value>${escapeXml(r.value || "")}</value>`;
+        xml += `</field>`;
+      }
+      xml += `</BiroA>`;
+
+      context.document.customXmlParts.add(xml);
+      await context.sync();
+    });
+  } catch (e) {
+    console.error("Save failed:", e);
+    // auto-save: ne smaraj korisnika
+  }
+}
+
+async function loadFromDocument() {
+  try {
+    await Word.run(async (context) => {
+      const parts = context.document.customXmlParts.getByNamespace(XML_NS);
+      parts.load("items");
+      await context.sync();
+
+      if (!parts.items.length) return;
+
+      const xmlRes = parts.items[0].getXml();
+      await context.sync();
+
+      const xml = (xmlRes && xmlRes.value) ? xmlRes.value : "";
+      if (!xml) return;
+
+      const doc = new DOMParser().parseFromString(xml, "text/xml");
+      const fields = Array.from(doc.getElementsByTagName("field"));
+
+      const newRows = [];
+      let idx = 1;
+
+      for (const f of fields) {
+        const name = f.getAttribute("name") || "";
+        const valueEl = f.getElementsByTagName("value")[0];
+        const value = valueEl ? (valueEl.textContent || "") : "";
+        if (!name) continue;
+        newRows.push({ id: idx++, field: name, value });
+      }
+
+      if (newRows.length) {
+        rows = newRows;
+        selectedRowId = rows[0] ? rows[0].id : null;
+        renderRows();
+        showStatus(`✓ Učitano ${rows.length} polja iz dokumenta`, true);
+      }
+    });
+  } catch (e) {
+    console.error("Load failed:", e);
+    showStatus(`⚠ Greška pri učitavanju: ${e && e.message ? e.message : String(e)}`, true);
+  }
+}
+
+function triggerAutoSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => { saveToDocument(); }, 1500);
+}
+
+/* =========================
+   CSV IMPORT/EXPORT
+   ========================= */
+
+function exportCSV() {
+  const lines = rows.map((r) => `${r.field},${r.value}`);
+  const csv = lines.join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ba-polja.csv";
+  a.click();
+
+  URL.revokeObjectURL(url);
+  showStatus("✓ CSV eksportovan", true);
+}
+
+function importCSV() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".csv,text/csv";
+
+  input.onchange = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const lines = text.trim().split("\n");
+    const newRows = [];
+    let id = 1;
+
+    for (const line of lines) {
+      const parts = line.split(",");
+      const field = (parts[0] || "").trim();
+      const value = (parts.slice(1).join(",") || "").trim(); // dozvoli zarez u value
+      if (field) {
+        newRows.push({ id: id++, field, value });
+      }
+    }
+
+    if (newRows.length) {
+      rows = newRows;
+      selectedRowId = rows[0] ? rows[0].id : null;
+      renderRows();
+      await saveToDocument();
+      showStatus(`✓ Importovano ${newRows.length} polja iz CSV`, true);
+    }
   };
+
+  input.click();
 }
 
-// ---------- formatting ----------
-function applyFormat(type, format, rawValue) {
-  const v = String(rawValue ?? "");
+/* =========================
+   WORD ACTIONS
+   ========================= */
 
-  if (!v) return "";
-
-  // minimal formatting rules
-  if (type === "number") {
-    const n = Number(String(v).replace(",", "."));
-    if (Number.isNaN(n)) return v;
-    if (format === "number:int") return String(Math.round(n));
-    if (format === "number:2") return n.toFixed(2);
-    return String(n);
-  }
-
-  if (type === "date") {
-    // expect yyyy-mm-dd or dd.mm.yyyy; keep as-is if unknown
-    if (format === "date:today") {
-      const d = new Date();
-      const dd = String(d.getDate()).padStart(2, "0");
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const yyyy = d.getFullYear();
-      return `${dd}.${mm}.${yyyy}`;
-    }
-    return v;
-  }
-
-  // text
-  return v;
-}
-
-function buildValueMap() {
-  const map = new Map();
-  for (const r0 of rows) {
-    const r = ensureDefaults(r0);
-    const key = normalizeKey(r.field);
-    if (!key) continue;
-    const raw = (r.value ?? "").trim();
-    const formatted = applyFormat(r.type, r.format, raw);
-    map.set(key, { raw, formatted });
-  }
-  return map;
-}
-
-// ---------- render ----------
-function renderRows() {
-  const tbodyLeft = elMaybe("tbody-left");
-  const tbodyRight = elMaybe("tbody-right");
-  if (!tbodyLeft || !tbodyRight) return;
-
-  tbodyLeft.innerHTML = "";
-  tbodyRight.innerHTML = "";
-
-  for (const r0 of rows) {
-    const r = ensureDefaults(r0);
-
-    // LEFT table: fields list
-    const trL = document.createElement("tr");
-    trL.dataset.id = String(r.id);
-    if (r.id === selectedRowId) trL.classList.add("selected");
-
-    const tdField = document.createElement("td");
-    tdField.textContent = r.field || "";
-    trL.appendChild(tdField);
-
-    trL.addEventListener("click", () => {
-      selectedRowId = r.id;
-      renderRows();
-      syncEditorFromSelected();
-    });
-
-    tbodyLeft.appendChild(trL);
-
-    // RIGHT table: values
-    const trR = document.createElement("tr");
-    trR.dataset.id = String(r.id);
-    if (r.id === selectedRowId) trR.classList.add("selected");
-
-    const tdValue = document.createElement("td");
-    tdValue.textContent = r.value || "";
-    trR.appendChild(tdValue);
-
-    trR.addEventListener("click", () => {
-      selectedRowId = r.id;
-      renderRows();
-      syncEditorFromSelected();
-    });
-
-    tbodyRight.appendChild(trR);
-  }
-}
-
-function getSelectedRow() {
-  return rows.find((r) => r.id === selectedRowId) || rows[0] || null;
-}
-
-function syncEditorFromSelected() {
-  const r = getSelectedRow();
-  if (!r) return;
-
-  const field = elMaybe("inp-field");
-  const value = elMaybe("inp-value");
-  const type = elMaybe("sel-type");
-  const format = elMaybe("sel-format");
-  if (field) field.value = r.field || "";
-  if (value) value.value = r.value || "";
-  if (type) type.value = r.type || "text";
-  if (format) format.value = r.format || "text:auto";
-}
-
-function syncSelectedFromEditor() {
-  const r = getSelectedRow();
-  if (!r) return;
-
-  const field = elMaybe("inp-field");
-  const value = elMaybe("inp-value");
-  const type = elMaybe("sel-type");
-  const format = elMaybe("sel-format");
-
-  r.field = field ? field.value : r.field;
-  r.value = value ? value.value : r.value;
-  r.type = type ? type.value : r.type;
-  r.format = format ? format.value : r.format;
-}
-
-// ---------- persistence (CustomXml) ----------
-const XML_NS = "http://biroa.local/ba-word-addin";
-const XML_ROOT = "BAWordAddinState";
-
-function buildStateXml() {
-  const esc = (s) =>
-    String(s ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&apos;");
-
-  const items = rows
-    .map(ensureDefaults)
-    .filter((r) => normalizeKey(r.field))
-    .map(
-      (r) =>
-        `<item field="${esc(r.field)}" value="${esc(r.value)}" type="${esc(
-          r.type
-        )}" format="${esc(r.format)}" />`
-    )
-    .join("");
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<${XML_ROOT} xmlns="${XML_NS}">
-  ${items}
-</${XML_ROOT}>`;
-}
-
-async function saveStateToDocument() {
-  const xml = buildStateXml();
-
-  await Word.run(async (context) => {
-    const parts = context.document.customXmlParts;
-    parts.load("items");
-    await context.sync();
-
-    // delete existing BA state
-    for (const p of parts.items) {
-      p.load("namespaceUri");
-    }
-    await context.sync();
-
-    for (const p of parts.items) {
-      if (p.namespaceUri === XML_NS) p.delete();
-    }
-    await context.sync();
-
-    context.document.customXmlParts.add(xml);
-    await context.sync();
-  });
-}
-
-async function loadStateFromDocument() {
-  await Word.run(async (context) => {
-    const parts = context.document.customXmlParts;
-    parts.load("items");
-    await context.sync();
-
-    for (const p of parts.items) {
-      p.load("namespaceUri");
-    }
-    await context.sync();
-
-    const mine = parts.items.find((p) => p.namespaceUri === XML_NS);
-    if (!mine) return;
-
-    const xml = mine.getXml();
-    await context.sync();
-
-    const str = xml.value || "";
-    // simple parse: extract <item ... />
-    const items = [];
-    const re = /<item\s+([^/>]+?)\s*\/>/g;
-    let m;
-    while ((m = re.exec(str))) {
-      const attrs = m[1];
-      const get = (name) => {
-        const rm = new RegExp(`${name}="([^"]*)"`);
-        const mm = rm.exec(attrs);
-        if (!mm) return "";
-        return mm[1]
-          .replace(/&quot;/g, '"')
-          .replace(/&apos;/g, "'")
-          .replace(/&gt;/g, ">")
-          .replace(/&lt;/g, "<")
-          .replace(/&amp;/g, "&");
-      };
-      items.push({
-        field: get("field"),
-        value: get("value"),
-        type: get("type") || "text",
-        format: get("format") || "text:auto",
-      });
-    }
-
-    if (items.length) {
-      rows = items.map((it, idx) => ({
-        id: idx + 1,
-        field: it.field,
-        value: it.value,
-        type: it.type,
-        format: it.format,
-      }));
-      if (!rows.length)
-        rows = [{ id: 1, field: "", value: "", type: "text", format: "text:auto" }];
-      selectedRowId = rows[0].id;
-    }
-  });
-}
-
-async function deleteSavedStateFromDocument() {
-  await Word.run(async (context) => {
-    const parts = context.document.customXmlParts;
-    parts.load("items");
-    await context.sync();
-
-    for (const p of parts.items) {
-      p.load("namespaceUri");
-    }
-    await context.sync();
-
-    for (const p of parts.items) {
-      if (p.namespaceUri === XML_NS) p.delete();
-    }
-    await context.sync();
-  });
-}
-
-// ---------- Word operations ----------
-async function insertFieldAtSelection() {
-  syncSelectedFromEditor();
-  const r = getSelectedRow();
-  if (!r) return;
-
-  const key = normalizeKey(r.field);
+async function insertFieldWithMeta() {
+  const key = getSelectedKey();
   if (!key) {
-    setStatus("Unesi naziv polja.", "warn");
+    showStatus("⚠ UBACI POLJE: prvo klikni red u tabeli", true);
     return;
   }
 
+  const pick = await openInsertModal(key);
+  if (!pick) return;
+
+  const tag = makeTag(key, pick.type, pick.fmt);
+
   await Word.run(async (context) => {
-    const sel = context.document.getSelection();
-    const cc = sel.insertContentControl();
-    cc.tag = makeTag(key, r.type, r.format);
+    const range = context.document.getSelection();
+    const cc = range.insertContentControl();
+    cc.tag = tag;
     cc.title = key;
-    cc.appearance = "Tags";
-    cc.insertText(token(key), Word.InsertLocation.replace);
+    cc.appearance = "BoundingBox";
+    cc.insertText(`{${key}}`, "Replace");
     await context.sync();
-    setStatus(`Dodato polje: ${key}`, "info");
   });
 
-  await saveStateToDocument();
+  await saveToDocument();
+  showStatus(`✓ Ubačeno polje: {${key}}`, true);
 }
 
-async function scanFieldsFromDocument() {
-  await Word.run(async (context) => {
-    const ccs = context.document.contentControls;
-    ccs.load("items/tag,title");
-    await context.sync();
-
-    const found = [];
-    for (const cc of ccs.items) {
-      const meta = parseTag(cc.tag || "");
-      if (!meta) continue;
-      found.push({
-        field: meta.key,
-        value: "",
-        type: meta.type || "text",
-        format: meta.format || "text:auto",
-      });
-    }
-
-    const uniq = new Map();
-    for (const f of found) {
-      const k = normalizeKey(f.field);
-      if (!k) continue;
-      if (!uniq.has(k))
-        uniq.set(k, { field: k, value: "", type: f.type, format: f.format });
-    }
-
-    const arr = Array.from(uniq.values());
-    rows = arr.length
-      ? arr.map((it, idx) => ({ id: idx + 1, ...it }))
-      : [{ id: 1, field: "", value: "", type: "text", format: "text:auto" }];
-
-    selectedRowId = rows[0].id;
-  });
-
-  renderRows();
-  syncEditorFromSelected();
-  await saveStateToDocument();
-  setStatus("Skenirano.", "info");
-}
-
-async function fillFieldsFromTable() {
-  const map = buildValueMap();
-  renderRows();
+async function fillAll() {
+  const map = getMap();
+  const askedToday = new Set();
 
   await Word.run(async (context) => {
     const ccs = context.document.contentControls;
     ccs.load("items/tag");
     await context.sync();
 
-    let filled = 0;
+    let changed = 0;
+    let skipped = 0;
+    let usedToday = 0;
+
     for (const cc of ccs.items) {
       const meta = parseTag(cc.tag || "");
-      if (!meta) continue;
-      const out = map.get(meta.key)?.formatted ?? token(meta.key);
+      if (!meta) { skipped++; continue; }
 
-      // VAŽNO: upis u sadržaj kontrole (ne preko getRange()), da polje ostane
-      cc.insertText(out, Word.InsertLocation.replace);
+      let raw = map.get(meta.key);
 
-      filled++;
+      if (meta.type === "D" && (!raw || raw.trim() === "")) {
+        if (!askedToday.has(meta.key)) {
+          askedToday.add(meta.key);
+          const yes = await confirmToday(meta.key);
+          if (yes) {
+            raw = todayRawDDMMYYYY();
+            usedToday++;
+
+            rows = rows.map((r) => {
+              if (normalizeKey(r.field) === meta.key) return { ...r, value: raw };
+              return r;
+            });
+            renderRows();
+          }
+        }
+      }
+
+      if (raw === undefined) { skipped++; continue; }
+      if (meta.type !== "D" && raw.trim() === "") { skipped++; continue; }
+      if (meta.type === "D" && raw.trim() === "") { skipped++; continue; }
+
+      const out = applyFormat(raw, meta.type, meta.fmt);
+      cc.insertText(out, "Replace");
+      changed++;
     }
+
     await context.sync();
-    setStatus(`Popunjeno ${filled} polja.`, "info");
+
+    let msg = `✓ Popunjeno ${changed} polja`;
+    if (usedToday > 0) msg += `, današnji datum ${usedToday}x`;
+    if (skipped > 0) msg += `, preskočeno ${skipped}`;
+    showStatus(msg, true);
   });
 
-  await saveStateToDocument();
+  await saveToDocument();
 }
 
-async function clearFieldsKeepControls() {
-  // UI: obriši vrednosti u desnoj tabeli
-  rows = rows.map((r) => ({ ...r, value: "" }));
-  renderRows();
-
-  // Word: vrati sva BA polja na {KEY}, ali ostavi kontrole
+async function clearFieldsToPlaceholder() {
   await Word.run(async (context) => {
     const ccs = context.document.contentControls;
     ccs.load("items/tag");
@@ -439,24 +667,28 @@ async function clearFieldsKeepControls() {
     for (const cc of ccs.items) {
       const meta = parseTag(cc.tag || "");
       if (!meta) continue;
-
-      // VAŽNO: upis u sadržaj kontrole, da kontrola ostane
-      cc.insertText(token(meta.key), Word.InsertLocation.replace);
-
+      cc.insertText(`{${meta.key}}`, "Replace");
       cleared++;
     }
+
     await context.sync();
-    setStatus(`Očišćeno ${cleared} polja i obrisane vrednosti.`, "info");
+    showStatus(`✓ Očišćeno ${cleared} polja`, true);
   });
 
-  // Persist: sačuvaj prazne vrednosti
-  await saveStateToDocument();
+  await saveToDocument();
 }
 
-async function deleteControlsLeaveTextAndXml() {
-  // cilj: ukloniti SVE tragove plugina (kontrole + XML), i ostaviti samo običan tekst
-  const map = buildValueMap();
-  renderRows();
+async function deleteControlsKeepText() {
+  const confirm = window.confirm(
+    "⚠ UPOZORENJE\n\n" +
+    "Ova akcija će:\n" +
+    "• Obrisati sve kontrole polja\n" +
+    "• Zadržati tekst u dokumentu\n" +
+    "• Obrisati sačuvane podatke (XML)\n\n" +
+    "Da li ste sigurni?"
+  );
+
+  if (!confirm) return;
 
   await Word.run(async (context) => {
     const ccs = context.document.contentControls;
@@ -464,186 +696,157 @@ async function deleteControlsLeaveTextAndXml() {
     await context.sync();
 
     let removed = 0;
-    for (const cc of ccs.items) {
+    for (let i = ccs.items.length - 1; i >= 0; i--) {
+      const cc = ccs.items[i];
       const meta = parseTag(cc.tag || "");
       if (!meta) continue;
-
-      // bez token fallback-a: ako nema vrednosti -> prazno
-      const out = map.get(meta.key)?.formatted ?? "";
-
-      // upiši tekst u kontrolu, pa obriši kontrolu
-      cc.insertText(out, Word.InsertLocation.replace);
-      cc.delete(false);
+      cc.delete(true); // keepContent = true
       removed++;
     }
+
     await context.sync();
-    setStatus(`Obrisane kontrole: ${removed}.`, "info");
+    showStatus(`✓ Uklonjeno ${removed} kontrola (tekst ostao)`, true);
   });
 
-  // ukloni persistence (CustomXml)
-  await deleteSavedStateFromDocument();
+  try {
+    await Word.run(async (context) => {
+      const parts = context.document.customXmlParts.getByNamespace(XML_NS);
+      parts.load("items");
+      await context.sync();
+      parts.items.forEach((p) => p.delete());
+      await context.sync();
+    });
+  } catch (e) {
+    console.error("XML delete failed:", e);
+  }
+}
 
-  // očisti UI (opciono, ali praktično)
-  rows = [{ id: 1, field: "", value: "", type: "text", format: "text:auto" }];
-  selectedRowId = rows[0]?.id ?? null;
+/* =========================
+   KEYBOARD SHORTCUTS
+   ========================= */
+
+function setupKeyboardShortcuts() {
+  document.addEventListener("keydown", (e) => {
+    const activeEl = document.activeElement;
+    const isInput = activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA");
+
+    if (e.ctrlKey && e.key === "Enter") {
+      e.preventDefault();
+      insertFieldWithMeta();
+      return;
+    }
+
+    if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
+      e.preventDefault();
+      saveToDocument().then(() => showStatus("✓ Sačuvano", true));
+      return;
+    }
+
+    if (e.key === "Delete" && !isInput && selectedRowId) {
+      e.preventDefault();
+      deleteRow(selectedRowId);
+      return;
+    }
+
+    if (e.ctrlKey && (e.key === "e" || e.key === "E")) {
+      e.preventDefault();
+      exportCSV();
+      return;
+    }
+
+    if (e.ctrlKey && (e.key === "i" || e.key === "I")) {
+      e.preventDefault();
+      importCSV();
+      return;
+    }
+  });
+}
+
+/* =========================
+   UI WIRING
+   ========================= */
+
+function setActive(btnId) {
+  const ids = ["btnInsert", "btnFill", "btnClear", "btnDelete"];
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove("active");
+  });
+  const b = document.getElementById(btnId);
+  if (b) b.classList.add("active");
+}
+
+function wireUI() {
+  const btnAdd = $("btnAddRow");
+  if (btnAdd) btnAdd.addEventListener("click", addRow);
+
+  const btnInsert = $("btnInsert");
+  if (btnInsert) {
+    btnInsert.addEventListener("click", async () => {
+      setActive("btnInsert");
+      showStatus("");
+      try { await insertFieldWithMeta(); }
+      catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
+    });
+  }
+
+  const btnFill = $("btnFill");
+  if (btnFill) {
+    btnFill.addEventListener("click", async () => {
+      setActive("btnFill");
+      showStatus("");
+      try { await fillAll(); }
+      catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
+    });
+  }
+
+  const btnClear = $("btnClear");
+  if (btnClear) {
+    btnClear.addEventListener("click", async () => {
+      setActive("btnClear");
+      showStatus("");
+      try { await clearFieldsToPlaceholder(); }
+      catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
+    });
+  }
+
+  const btnDelete = $("btnDelete");
+  if (btnDelete) {
+    btnDelete.addEventListener("click", async () => {
+      setActive("btnDelete");
+      showStatus("");
+      try { await deleteControlsKeepText(); }
+      catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
+    });
+  }
+
+  const btnExport = $("btnExportCSV");
+  if (btnExport) {
+    btnExport.addEventListener("click", () => {
+      try { exportCSV(); }
+      catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
+    });
+  }
+
+  const btnImport = $("btnImportCSV");
+  if (btnImport) {
+    btnImport.addEventListener("click", () => {
+      try { importCSV(); }
+      catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
+    });
+  }
+
+  if (selectedRowId == null && rows.length) selectedRowId = rows[0].id;
   renderRows();
-
-  setStatus("Dokument je očišćen od plugina (bez kontrola i XML).", "info");
-}
-
-// ---------- CSV ----------
-function csvEscapeCell(s, delimiter = ";") {
-  const v = String(s ?? "");
-  const mustQuote =
-    v.includes(delimiter) || v.includes('"') || v.includes("\n") || v.includes("\r");
-  if (!mustQuote) return v;
-  return `"${v.replace(/"/g, '""')}"`;
-}
-
-function exportCSV() {
-  const delimiter = ";";
-  const lines = [];
-  for (const r of rows) {
-    const f = (r.field || "").trim();
-    const v = (r.value || "").trim();
-    if (!f) continue;
-    lines.push(`${csvEscapeCell(f, delimiter)}${delimiter}${csvEscapeCell(v, delimiter)}`);
-  }
-
-  const csv = lines.join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "biroa-fields.csv";
-  a.click();
-  URL.revokeObjectURL(url);
-
-  setStatus(`Eksportovano ${lines.length} polja u CSV (delimiter ';').`, "info");
-}
-
-function parseCsvLine(line, delimiter = ";") {
-  const out = [];
-  let cur = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-
-    if (inQuotes) {
-      if (ch === '"') {
-        if (line[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        cur += ch;
-      }
-    } else {
-      if (ch === '"') inQuotes = true;
-      else if (ch === delimiter) {
-        out.push(cur);
-        cur = "";
-      } else {
-        cur += ch;
-      }
-    }
-  }
-  out.push(cur);
-  return out;
-}
-
-async function importCSV() {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".csv";
-
-  input.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const text = await file.text();
-    const lines = text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-
-    const newRows = [];
-    let id = 1;
-
-    for (const line of lines) {
-      // novi standard ';', fallback za stare fajlove ','
-      let parts = parseCsvLine(line, ";");
-      let usedDelim = ";";
-      if (parts.length < 2) {
-        parts = parseCsvLine(line, ",");
-        usedDelim = ",";
-      }
-
-      const field = (parts[0] || "").trim();
-      const value = (parts.slice(1).join(usedDelim) || "").trim();
-      if (field) {
-        newRows.push({ id: id++, field, value, type: "text", format: "text:auto" });
-      }
-    }
-
-    if (newRows.length) {
-      rows = newRows;
-      selectedRowId = rows[0]?.id ?? null;
-      renderRows();
-      await saveStateToDocument();
-      setStatus(`Importovano ${newRows.length} polja iz CSV.`, "info");
-    }
-  };
-
-  input.click();
-}
-
-// ---------- wiring ----------
-function bindUi() {
-  const btnAdd = elMaybe("btn-add");
-  const btnScan = elMaybe("btn-scan");
-  const btnFill = elMaybe("btn-fill");
-  const btnClear = elMaybe("btn-clear");
-  const btnDelete = elMaybe("btn-delete");
-  const btnExport = elMaybe("btn-export");
-  const btnImport = elMaybe("btn-import");
-
-  if (btnAdd) btnAdd.addEventListener("click", insertFieldAtSelection);
-  if (btnScan) btnScan.addEventListener("click", scanFieldsFromDocument);
-  if (btnFill) btnFill.addEventListener("click", fillFieldsFromTable);
-  if (btnClear) btnClear.addEventListener("click", clearFieldsKeepControls);
-  if (btnDelete) btnDelete.addEventListener("click", deleteControlsLeaveTextAndXml);
-  if (btnExport) btnExport.addEventListener("click", exportCSV);
-  if (btnImport) btnImport.addEventListener("click", importCSV);
-
-  const field = elMaybe("inp-field");
-  const value = elMaybe("inp-value");
-  const type = elMaybe("sel-type");
-  const format = elMaybe("sel-format");
-
-  const onChange = async () => {
-    syncSelectedFromEditor();
-    renderRows();
-    await saveStateToDocument();
-  };
-
-  if (field) field.addEventListener("input", onChange);
-  if (value) value.addEventListener("input", onChange);
-  if (type) type.addEventListener("change", onChange);
-  if (format) format.addEventListener("change", onChange);
+  setupKeyboardShortcuts();
 }
 
 Office.onReady(async () => {
-  try {
-    await loadStateFromDocument();
-  } catch (e) {
-    // ignore
-  }
+  wireUI();
 
-  renderRows();
-  syncEditorFromSelected();
-  bindUi();
+  try {
+    await loadFromDocument();
+  } catch (e) {
+    console.error("Initial load failed:", e);
+  }
 });
