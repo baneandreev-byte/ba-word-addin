@@ -353,7 +353,7 @@ body {
   font-weight: 700;
   font-size: 15px;
   border: 2px solid #93c5fd;
-  font-family: "Courier New", monospace;
+  font-family: inherit;
 }
 
 /* ========== Modal: Form Groups ========== */
