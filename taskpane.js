@@ -1,6 +1,5 @@
 /* global Office, Word */
 
-
 let rows = [
   { id: 1, field: "", value: "" },
   { id: 2, field: "", value: "" },
@@ -24,18 +23,18 @@ function normalizeKey(s) {
     .replace(/[^A-Z0-9_]/g, "");
 }
 
-function showStatus(msg, autohide = false) {
+function showStatus(msg, autohide) {
   const el = $("status");
-  el.textContent = msg;
+  if (!el) return;
+
+  el.textContent = msg || "";
   el.style.display = msg ? "block" : "none";
-  
-  // Clear previous timer
+
   if (statusTimer) {
     clearTimeout(statusTimer);
     statusTimer = null;
   }
-  
-  // Auto-hide after 4 seconds
+
   if (autohide && msg) {
     statusTimer = window.setTimeout(() => {
       el.style.display = "none";
@@ -52,13 +51,15 @@ function getMap() {
   const m = new Map();
   for (const r of rows) {
     const k = normalizeKey(r.field);
-    if (k) m.set(k, r.value ?? "");
+    if (k) m.set(k, (r.value == null ? "" : r.value));
   }
   return m;
 }
 
 function addRow() {
-  rows.push({ id: Math.max(...rows.map((r) => r.id), 0) + 1, field: "", value: "" });
+  const nextId = Math.max(...rows.map((r) => r.id), 0) + 1;
+  rows.push({ id: nextId, field: "", value: "" });
+  if (selectedRowId == null) selectedRowId = nextId;
   renderRows();
   triggerAutoSave();
 }
@@ -70,13 +71,13 @@ function deleteRow(id) {
   }
   rows = rows.filter((r) => r.id !== id);
   if (selectedRowId === id) {
-    selectedRowId = rows[0]?.id ?? null;
+    selectedRowId = rows[0] ? rows[0].id : null;
   }
   renderRows();
   triggerAutoSave();
 }
 
-function updateRow(id, key: "field" | "value", val) {
+function updateRow(id, key, val) {
   rows = rows.map((r) => (r.id === id ? { ...r, [key]: val } : r));
   triggerAutoSave();
 }
@@ -84,12 +85,13 @@ function updateRow(id, key: "field" | "value", val) {
 function getSelectedKey() {
   if (selectedRowId == null) return null;
   const r = rows.find((x) => x.id === selectedRowId);
-  const key = normalizeKey(r?.field || "");
+  const key = normalizeKey((r && r.field) || "");
   return key || null;
 }
 
 function renderRows() {
   const container = $("rows");
+  if (!container) return;
   container.innerHTML = "";
 
   rows.forEach((r) => {
@@ -111,7 +113,7 @@ function renderRows() {
         renderRows();
       }
     });
-    i1.addEventListener("input", (e) => updateRow(r.id, "field", (e.target).value));
+    i1.addEventListener("input", (e) => updateRow(r.id, "field", e.target.value));
     c1.appendChild(i1);
 
     const c2 = document.createElement("div");
@@ -125,7 +127,7 @@ function renderRows() {
         renderRows();
       }
     });
-    i2.addEventListener("input", (e) => updateRow(r.id, "value", (e.target).value));
+    i2.addEventListener("input", (e) => updateRow(r.id, "value", e.target.value));
     c2.appendChild(i2);
 
     const c3 = document.createElement("div");
@@ -151,19 +153,21 @@ function renderRows() {
    TYPE: T (text), D (date), N (number)
    ========================= */
 
-
 function makeTag(key, type, fmt) {
   return `${key}|${type}|${fmt}`;
 }
 
-function parseTag(tag): { key; type; fmt } {
+function parseTag(tag) {
   const parts = (tag || "").split("|");
   if (parts.length < 3) return null;
+
   const key = normalizeKey(parts[0]);
   const type = parts[1];
   const fmt = parts.slice(2).join("|");
+
   if (!key) return null;
   if (type !== "T" && type !== "D" && type !== "N") return null;
+
   return { key, type, fmt };
 }
 
@@ -194,17 +198,20 @@ const FORMAT_OPTIONS = {
     { value: "CUR_RSD_0", label: "RSD (0 dec)" },
     { value: "CUR_USD_2", label: "USD (2 dec)" },
   ],
-} as const;
+};
 
 function showOverlay(show) {
-  const el = document.getElementById("modalOverlay");
+  const el = $("modalOverlay");
+  if (!el) return;
   el.style.display = show ? "flex" : "none";
 }
 
 function fillFormatOptions(type) {
-  const sel = document.getElementById("modalFormat");
+  const sel = $("modalFormat");
+  if (!sel) return;
   sel.innerHTML = "";
-  const opts = FORMAT_OPTIONS[type];
+
+  const opts = FORMAT_OPTIONS[type] || [];
   for (const o of opts) {
     const opt = document.createElement("option");
     opt.value = o.value;
@@ -213,12 +220,17 @@ function fillFormatOptions(type) {
   }
 }
 
-async function openInsertModal(key): Promise<{ type; fmt }> {
-  const nameEl = document.getElementById("modalFieldName");
-  const typeEl = document.getElementById("modalType");
-  const fmtEl = document.getElementById("modalFormat");
-  const okBtn = document.getElementById("modalOk");
-  const cancelBtn = document.getElementById("modalCancel");
+async function openInsertModal(key) {
+  const nameEl = $("modalFieldName");
+  const typeEl = $("modalType");
+  const fmtEl = $("modalFormat");
+  const okBtn = $("modalOk");
+  const cancelBtn = $("modalCancel");
+
+  if (!nameEl || !typeEl || !fmtEl || !okBtn || !cancelBtn) {
+    showStatus("⚠ Modal elementi nisu pronađeni u HTML-u", true);
+    return null;
+  }
 
   nameEl.textContent = key;
 
@@ -258,17 +270,22 @@ async function openInsertModal(key): Promise<{ type; fmt }> {
 /* ===== Confirm modal (Today date) ===== */
 
 function showConfirmOverlay(show) {
-  const el = document.getElementById("confirmOverlay");
+  const el = $("confirmOverlay");
+  if (!el) return;
   el.style.display = show ? "flex" : "none";
 }
 
-async function confirmToday(key): Promise<boolean> {
-  const textEl = document.getElementById("confirmText");
-  const yesBtn = document.getElementById("confirmYes");
-  const noBtn = document.getElementById("confirmNo");
+async function confirmToday(key) {
+  const textEl = $("confirmText");
+  const yesBtn = $("confirmYes");
+  const noBtn = $("confirmNo");
+
+  if (!textEl || !yesBtn || !noBtn) {
+    // fallback: confirm()
+    return window.confirm(`Polje "${key}" je prazno u tabeli.\nDa li je to današnji datum?`);
+  }
 
   textEl.textContent = `Polje "${key}" je prazno u tabeli.\nDa li je to današnji datum?`;
-
   showConfirmOverlay(true);
 
   return await new Promise((resolve) => {
@@ -297,7 +314,7 @@ function toSentenceCase(s) {
 }
 
 function formatText(raw, fmt) {
-  const v = raw ?? "";
+  const v = raw == null ? "" : String(raw);
   switch (fmt) {
     case "UPPER": return v.toUpperCase();
     case "LOWER": return v.toLowerCase();
@@ -307,20 +324,24 @@ function formatText(raw, fmt) {
   }
 }
 
-function parseDateLoose(raw): Date {
+function parseDateLoose(raw) {
   const s = (raw || "").trim();
   if (!s) return null;
 
   const m1 = s.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
   if (m1) {
-    const dd = Number(m1[1]), mm = Number(m1[2]), yyyy = Number(m1[3]);
+    const dd = Number(m1[1]);
+    const mm = Number(m1[2]);
+    const yyyy = Number(m1[3]);
     const d = new Date(yyyy, mm - 1, dd);
     if (!isNaN(d.getTime())) return d;
   }
 
   const m2 = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (m2) {
-    const yyyy = Number(m2[1]), mm = Number(m2[2]), dd = Number(m2[3]);
+    const yyyy = Number(m2[1]);
+    const mm = Number(m2[2]);
+    const dd = Number(m2[3]);
     const d = new Date(yyyy, mm - 1, dd);
     if (!isNaN(d.getTime())) return d;
   }
@@ -331,39 +352,34 @@ function parseDateLoose(raw): Date {
   return null;
 }
 
-const MONTHS_SR_LAT = ["januar","februar","mart","april","maj","jun","jul","avgust","septembar","oktobar","novembar","decembar"];
-function pad2(n) { return String(n).padStart(2, "0"); }
+const MONTHS_SR_LAT = [
+  "januar","februar","mart","april","maj","jun","jul","avgust","septembar","oktobar","novembar","decembar"
+];
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
 
 function formatDate(raw, fmt) {
   const d = parseDateLoose(raw);
-  if (!d) return raw ?? "";
+  if (!d) return raw == null ? "" : String(raw);
 
   const dd = d.getDate();
   const mm = d.getMonth() + 1;
   const yyyy = d.getFullYear();
-  const m = MONTHS_SR_LAT[mm - 1] ?? "";
+  const m = MONTHS_SR_LAT[mm - 1] || "";
 
   switch (fmt) {
-    case "DD":
-      return pad2(dd);
-
-    case "MM":
-      return pad2(mm);
-
-    case "YYYY":
-      return String(yyyy);
-
-    case "MONTH_TEXT":
-      return m;
-
+    case "DD": return pad2(dd);
+    case "MM": return pad2(mm);
+    case "YYYY": return String(yyyy);
+    case "MONTH_TEXT": return m;
     case "MONTH_TEXT_YEAR": {
       const cap = m ? m.charAt(0).toUpperCase() + m.slice(1) : "";
       return `${cap} ${yyyy}`;
     }
-
     case "DD_MONTH_TEXT_YYYY":
       return `${dd}. ${m} ${yyyy}`;
-
     case "DD_MM_YYYY":
     default:
       return `${pad2(dd)}.${pad2(mm)}.${yyyy}`;
@@ -371,15 +387,15 @@ function formatDate(raw, fmt) {
 }
 
 function formatNumber(raw, fmt) {
-  const s = (raw ?? "").toString().trim();
+  const s = (raw == null ? "" : String(raw)).toString().trim();
   if (!s) return "";
 
   const norm = s.replace(/\s/g, "").replace(",", ".");
   const n = Number(norm);
-  if (isNaN(n)) return raw ?? "";
+  if (isNaN(n)) return raw == null ? "" : String(raw);
 
   const m = fmt.match(/^(PLAIN|CUR)_(EUR|RSD|USD)?_(\d)$/);
-  if (!m) return raw ?? "";
+  if (!m) return raw == null ? "" : String(raw);
 
   const kind = m[1];
   const cur = m[2] || "";
@@ -387,11 +403,11 @@ function formatNumber(raw, fmt) {
 
   const formatted = n.toLocaleString("sr-RS", {
     minimumFractionDigits: dec,
-    maximumFractionDigits: dec
+    maximumFractionDigits: dec,
   });
 
   if (kind === "CUR") {
-    const sym = cur === "EUR" ? "€" : cur === "USD" ? "$" : cur === "RSD" ? "RSD" : "";
+    const sym = cur === "EUR" ? "€" : (cur === "USD" ? "$" : (cur === "RSD" ? "RSD" : ""));
     return sym ? `${formatted} ${sym}` : formatted;
   }
 
@@ -429,14 +445,12 @@ function escapeXml(s) {
 async function saveToDocument() {
   try {
     await Word.run(async (context) => {
-      // Delete old XML parts
       const parts = context.document.customXmlParts.getByNamespace(XML_NS);
       parts.load("items");
       await context.sync();
-      parts.items.forEach(p => p.delete());
+      parts.items.forEach((p) => p.delete());
       await context.sync();
 
-      // Create new XML
       let xml = `<BiroA xmlns="${XML_NS}">`;
       for (const r of rows) {
         const key = normalizeKey(r.field);
@@ -452,7 +466,7 @@ async function saveToDocument() {
     });
   } catch (e) {
     console.error("Save failed:", e);
-    // Don't show error to user for auto-save
+    // auto-save: ne smaraj korisnika
   }
 }
 
@@ -462,13 +476,13 @@ async function loadFromDocument() {
       const parts = context.document.customXmlParts.getByNamespace(XML_NS);
       parts.load("items");
       await context.sync();
-      
+
       if (!parts.items.length) return;
 
       const xmlRes = parts.items[0].getXml();
       await context.sync();
 
-      const xml = xmlRes.value || "";
+      const xml = (xmlRes && xmlRes.value) ? xmlRes.value : "";
       if (!xml) return;
 
       const doc = new DOMParser().parseFromString(xml, "text/xml");
@@ -476,32 +490,31 @@ async function loadFromDocument() {
 
       const newRows = [];
       let idx = 1;
-      
+
       for (const f of fields) {
         const name = f.getAttribute("name") || "";
-        const value = f.getElementsByTagName("value")[0]?.textContent || "";
+        const valueEl = f.getElementsByTagName("value")[0];
+        const value = valueEl ? (valueEl.textContent || "") : "";
         if (!name) continue;
         newRows.push({ id: idx++, field: name, value });
       }
 
       if (newRows.length) {
         rows = newRows;
-        selectedRowId = rows[0]?.id ?? null;
+        selectedRowId = rows[0] ? rows[0].id : null;
         renderRows();
         showStatus(`✓ Učitano ${rows.length} polja iz dokumenta`, true);
       }
     });
   } catch (e) {
     console.error("Load failed:", e);
-    showStatus(`⚠ Greška pri učitavanju: ${e?.message ?? String(e)}`, true);
+    showStatus(`⚠ Greška pri učitavanju: ${e && e.message ? e.message : String(e)}`, true);
   }
 }
 
 function triggerAutoSave() {
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => {
-    saveToDocument();
-  }, 1500);
+  saveTimer = window.setTimeout(() => { saveToDocument(); }, 1500);
 }
 
 /* =========================
@@ -509,14 +522,16 @@ function triggerAutoSave() {
    ========================= */
 
 function exportCSV() {
-  const lines = rows.map(r => `${r.field},${r.value}`);
+  const lines = rows.map((r) => `${r.field},${r.value}`);
   const csv = lines.join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
+
   const a = document.createElement("a");
   a.href = url;
   a.download = "ba-polja.csv";
   a.click();
+
   URL.revokeObjectURL(url);
   showStatus("✓ CSV eksportovan", true);
 }
@@ -525,8 +540,9 @@ function importCSV() {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = ".csv,text/csv";
+
   input.onchange = async (e) => {
-    const file = (e.target).files?.[0];
+    const file = e.target.files && e.target.files[0];
     if (!file) return;
 
     const text = await file.text();
@@ -535,24 +551,23 @@ function importCSV() {
     let id = 1;
 
     for (const line of lines) {
-      const [field, value] = line.split(",");
-      if (field?.trim()) {
-        newRows.push({
-          id: id++,
-          field: field.trim(),
-          value: value?.trim() || ""
-        });
+      const parts = line.split(",");
+      const field = (parts[0] || "").trim();
+      const value = (parts.slice(1).join(",") || "").trim(); // dozvoli zarez u value
+      if (field) {
+        newRows.push({ id: id++, field, value });
       }
     }
 
     if (newRows.length) {
       rows = newRows;
-      selectedRowId = rows[0]?.id ?? null;
+      selectedRowId = rows[0] ? rows[0].id : null;
       renderRows();
       await saveToDocument();
       showStatus(`✓ Importovano ${newRows.length} polja iz CSV`, true);
     }
   };
+
   input.click();
 }
 
@@ -588,7 +603,7 @@ async function insertFieldWithMeta() {
 
 async function fillAll() {
   const map = getMap();
-  const askedToday = new Set(); // ask once per key per run
+  const askedToday = new Set();
 
   await Word.run(async (context) => {
     const ccs = context.document.contentControls;
@@ -605,7 +620,6 @@ async function fillAll() {
 
       let raw = map.get(meta.key);
 
-      // If DATE and empty => ask if today
       if (meta.type === "D" && (!raw || raw.trim() === "")) {
         if (!askedToday.has(meta.key)) {
           askedToday.add(meta.key);
@@ -613,11 +627,9 @@ async function fillAll() {
           if (yes) {
             raw = todayRawDDMMYYYY();
             usedToday++;
-            // Update the row value in table
-            rows = rows.map(r => {
-              if (normalizeKey(r.field) === meta.key) {
-                return { ...r, value: raw! };
-              }
+
+            rows = rows.map((r) => {
+              if (normalizeKey(r.field) === meta.key) return { ...r, value: raw };
               return r;
             });
             renderRows();
@@ -627,7 +639,7 @@ async function fillAll() {
 
       if (raw === undefined) { skipped++; continue; }
       if (meta.type !== "D" && raw.trim() === "") { skipped++; continue; }
-      if (meta.type === "D" && raw.trim() === "" ) { skipped++; continue; }
+      if (meta.type === "D" && raw.trim() === "") { skipped++; continue; }
 
       const out = applyFormat(raw, meta.type, meta.fmt);
       cc.insertText(out, "Replace");
@@ -635,7 +647,7 @@ async function fillAll() {
     }
 
     await context.sync();
-    
+
     let msg = `✓ Popunjeno ${changed} polja`;
     if (usedToday > 0) msg += `, današnji datum ${usedToday}x`;
     if (skipped > 0) msg += `, preskočeno ${skipped}`;
@@ -675,7 +687,7 @@ async function deleteControlsKeepText() {
     "• Obrisati sačuvane podatke (XML)\n\n" +
     "Da li ste sigurni?"
   );
-  
+
   if (!confirm) return;
 
   await Word.run(async (context) => {
@@ -696,13 +708,12 @@ async function deleteControlsKeepText() {
     showStatus(`✓ Uklonjeno ${removed} kontrola (tekst ostao)`, true);
   });
 
-  // Delete XML data as well
   try {
     await Word.run(async (context) => {
       const parts = context.document.customXmlParts.getByNamespace(XML_NS);
       parts.load("items");
       await context.sync();
-      parts.items.forEach(p => p.delete());
+      parts.items.forEach((p) => p.delete());
       await context.sync();
     });
   } catch (e) {
@@ -716,40 +727,34 @@ async function deleteControlsKeepText() {
 
 function setupKeyboardShortcuts() {
   document.addEventListener("keydown", (e) => {
-    // Ignore if typing in input
     const activeEl = document.activeElement;
-    const isInput = activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA";
+    const isInput = activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA");
 
-    // Ctrl+Enter = Insert field
     if (e.ctrlKey && e.key === "Enter") {
       e.preventDefault();
       insertFieldWithMeta();
       return;
     }
 
-    // Ctrl+S = Save (prevent default browser save)
-    if (e.ctrlKey && e.key === "s") {
+    if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
       e.preventDefault();
       saveToDocument().then(() => showStatus("✓ Sačuvano", true));
       return;
     }
 
-    // Delete key = delete selected row (only when not in input)
     if (e.key === "Delete" && !isInput && selectedRowId) {
       e.preventDefault();
       deleteRow(selectedRowId);
       return;
     }
 
-    // Ctrl+E = Export CSV
-    if (e.ctrlKey && e.key === "e") {
+    if (e.ctrlKey && (e.key === "e" || e.key === "E")) {
       e.preventDefault();
       exportCSV();
       return;
     }
 
-    // Ctrl+I = Import CSV
-    if (e.ctrlKey && e.key === "i") {
+    if (e.ctrlKey && (e.key === "i" || e.key === "I")) {
       e.preventDefault();
       importCSV();
       return;
@@ -763,66 +768,82 @@ function setupKeyboardShortcuts() {
 
 function setActive(btnId) {
   const ids = ["btnInsert", "btnFill", "btnClear", "btnDelete"];
-  ids.forEach((id) => (document.getElementById(id)).classList.remove("active"));
-  (document.getElementById(btnId)).classList.add("active");
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove("active");
+  });
+  const b = document.getElementById(btnId);
+  if (b) b.classList.add("active");
 }
 
 function wireUI() {
-  $("btnAddRow").addEventListener("click", addRow);
+  const btnAdd = $("btnAddRow");
+  if (btnAdd) btnAdd.addEventListener("click", addRow);
 
-  $("btnInsert").addEventListener("click", async () => {
-    setActive("btnInsert");
-    showStatus("");
-    try { await insertFieldWithMeta(); }
-    catch (e) { showStatus(`⚠ Greška: ${e?.message ?? String(e)}`, true); }
-  });
+  const btnInsert = $("btnInsert");
+  if (btnInsert) {
+    btnInsert.addEventListener("click", async () => {
+      setActive("btnInsert");
+      showStatus("");
+      try { await insertFieldWithMeta(); }
+      catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
+    });
+  }
 
-  $("btnFill").addEventListener("click", async () => {
-    setActive("btnFill");
-    showStatus("");
-    try { await fillAll(); }
-    catch (e) { showStatus(`⚠ Greška: ${e?.message ?? String(e)}`, true); }
-  });
+  const btnFill = $("btnFill");
+  if (btnFill) {
+    btnFill.addEventListener("click", async () => {
+      setActive("btnFill");
+      showStatus("");
+      try { await fillAll(); }
+      catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
+    });
+  }
 
-  $("btnClear").addEventListener("click", async () => {
-    setActive("btnClear");
-    showStatus("");
-    try { await clearFieldsToPlaceholder(); }
-    catch (e) { showStatus(`⚠ Greška: ${e?.message ?? String(e)}`, true); }
-  });
+  const btnClear = $("btnClear");
+  if (btnClear) {
+    btnClear.addEventListener("click", async () => {
+      setActive("btnClear");
+      showStatus("");
+      try { await clearFieldsToPlaceholder(); }
+      catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
+    });
+  }
 
-  $("btnDelete").addEventListener("click", async () => {
-    setActive("btnDelete");
-    showStatus("");
-    try { await deleteControlsKeepText(); }
-    catch (e) { showStatus(`⚠ Greška: ${e?.message ?? String(e)}`, true); }
-  });
+  const btnDelete = $("btnDelete");
+  if (btnDelete) {
+    btnDelete.addEventListener("click", async () => {
+      setActive("btnDelete");
+      showStatus("");
+      try { await deleteControlsKeepText(); }
+      catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
+    });
+  }
 
-  // CSV buttons (add these to HTML if needed)
-  const btnExport = document.getElementById("btnExportCSV");
+  const btnExport = $("btnExportCSV");
   if (btnExport) {
     btnExport.addEventListener("click", () => {
       try { exportCSV(); }
-      catch (e) { showStatus(`⚠ Greška: ${e?.message ?? String(e)}`, true); }
+      catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
     });
   }
 
-  const btnImport = document.getElementById("btnImportCSV");
+  const btnImport = $("btnImportCSV");
   if (btnImport) {
     btnImport.addEventListener("click", () => {
       try { importCSV(); }
-      catch (e) { showStatus(`⚠ Greška: ${e?.message ?? String(e)}`, true); }
+      catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
     });
   }
 
+  if (selectedRowId == null && rows.length) selectedRowId = rows[0].id;
   renderRows();
   setupKeyboardShortcuts();
 }
 
 Office.onReady(async () => {
   wireUI();
-  
-  // Load saved data from document
+
   try {
     await loadFromDocument();
   } catch (e) {
