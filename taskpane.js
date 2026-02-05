@@ -11,6 +11,8 @@ let selectedRowId = null;
 let saveTimer = null;
 let statusTimer = null;
 
+const XML_NS = "http://schemas.biroa.rs/word-fields/v1";
+
 function $(id) {
   return document.getElementById(id);
 }
@@ -25,7 +27,10 @@ function normalizeKey(s) {
 
 function showStatus(msg, autohide) {
   const el = $("status");
-  if (!el) return;
+  if (!el) {
+    console.log("STATUS element not found!");
+    return;
+  }
 
   el.textContent = msg || "";
   el.style.display = msg ? "block" : "none";
@@ -57,6 +62,7 @@ function getMap() {
 }
 
 function addRow() {
+  console.log("addRow called");
   const nextId = Math.max(...rows.map((r) => r.id), 0) + 1;
   rows.push({ id: nextId, field: "", value: "" });
   if (selectedRowId == null) selectedRowId = nextId;
@@ -90,11 +96,20 @@ function getSelectedKey() {
 }
 
 function renderRows() {
+  console.log("renderRows called, rows.length =", rows.length);
   const container = $("rows");
-  if (!container) return;
+  
+  if (!container) {
+    console.error("ROWS container NOT FOUND!");
+    showStatus("⚠ GREŠKA: Element #rows nije pronađen!", false);
+    return;
+  }
+  
+  console.log("Container found, clearing innerHTML");
   container.innerHTML = "";
 
-  rows.forEach((r) => {
+  rows.forEach((r, idx) => {
+    console.log(`Creating row ${idx}:`, r);
     const row = document.createElement("div");
     row.className = "row";
 
@@ -146,6 +161,8 @@ function renderRows() {
     row.appendChild(c3);
     container.appendChild(row);
   });
+  
+  console.log("renderRows complete, container.children.length =", container.children.length);
 }
 
 /* =========================
@@ -303,136 +320,79 @@ async function confirmToday(key) {
   });
 }
 
-/* =========================
-   FORMATTING
-   ========================= */
-
-function toSentenceCase(s) {
-  const t = (s || "").trim();
-  if (!t) return "";
-  return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
-}
-
-function formatText(raw, fmt) {
-  const v = raw == null ? "" : String(raw);
-  switch (fmt) {
-    case "UPPER": return v.toUpperCase();
-    case "LOWER": return v.toLowerCase();
-    case "SENTENCE": return toSentenceCase(v);
-    case "AS_IS":
-    default: return v;
-  }
-}
-
-function parseDateLoose(raw) {
-  const s = (raw || "").trim();
-  if (!s) return null;
-
-  const m1 = s.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
-  if (m1) {
-    const dd = Number(m1[1]);
-    const mm = Number(m1[2]);
-    const yyyy = Number(m1[3]);
-    const d = new Date(yyyy, mm - 1, dd);
-    if (!isNaN(d.getTime())) return d;
-  }
-
-  const m2 = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (m2) {
-    const yyyy = Number(m2[1]);
-    const mm = Number(m2[2]);
-    const dd = Number(m2[3]);
-    const d = new Date(yyyy, mm - 1, dd);
-    if (!isNaN(d.getTime())) return d;
-  }
-
-  const d3 = new Date(s);
-  if (!isNaN(d3.getTime())) return d3;
-
-  return null;
-}
-
-const MONTHS_SR_LAT = [
-  "januar","februar","mart","april","maj","jun","jul","avgust","septembar","oktobar","novembar","decembar"
-];
-
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
-
-function formatDate(raw, fmt) {
-  const d = parseDateLoose(raw);
-  if (!d) return raw == null ? "" : String(raw);
-
-  const dd = d.getDate();
-  const mm = d.getMonth() + 1;
-  const yyyy = d.getFullYear();
-  const m = MONTHS_SR_LAT[mm - 1] || "";
-
-  switch (fmt) {
-    case "DD": return pad2(dd);
-    case "MM": return pad2(mm);
-    case "YYYY": return String(yyyy);
-    case "MONTH_TEXT": return m;
-    case "MONTH_TEXT_YEAR": {
-      const cap = m ? m.charAt(0).toUpperCase() + m.slice(1) : "";
-      return `${cap} ${yyyy}`;
-    }
-    case "DD_MONTH_TEXT_YYYY":
-      return `${dd}. ${m} ${yyyy}`;
-    case "DD_MM_YYYY":
-    default:
-      return `${pad2(dd)}.${pad2(mm)}.${yyyy}`;
-  }
-}
-
-function formatNumber(raw, fmt) {
-  const s = (raw == null ? "" : String(raw)).toString().trim();
-  if (!s) return "";
-
-  const norm = s.replace(/\s/g, "").replace(",", ".");
-  const n = Number(norm);
-  if (isNaN(n)) return raw == null ? "" : String(raw);
-
-  const m = fmt.match(/^(PLAIN|CUR)_(EUR|RSD|USD)?_(\d)$/);
-  if (!m) return raw == null ? "" : String(raw);
-
-  const kind = m[1];
-  const cur = m[2] || "";
-  const dec = Number(m[3]);
-
-  const formatted = n.toLocaleString("sr-RS", {
-    minimumFractionDigits: dec,
-    maximumFractionDigits: dec,
-  });
-
-  if (kind === "CUR") {
-    const sym = cur === "EUR" ? "€" : (cur === "USD" ? "$" : (cur === "RSD" ? "RSD" : ""));
-    return sym ? `${formatted} ${sym}` : formatted;
-  }
-
-  return formatted;
-}
-
-function applyFormat(raw, type, fmt) {
-  if (type === "T") return formatText(raw, fmt);
-  if (type === "D") return formatDate(raw, fmt);
-  return formatNumber(raw, fmt);
-}
-
 function todayRawDDMMYYYY() {
   const d = new Date();
-  const dd = pad2(d.getDate());
-  const mm = pad2(d.getMonth() + 1);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
   const yyyy = d.getFullYear();
   return `${dd}.${mm}.${yyyy}`;
 }
 
 /* =========================
-   PERSISTENCE (Custom XML)
+   FORMAT HELPERS
    ========================= */
 
-const XML_NS = "biroa/fields/v2";
+function parseDDMMYYYY(raw) {
+  const parts = (raw || "").split(".");
+  if (parts.length !== 3) return null;
+  const dd = parseInt(parts[0], 10);
+  const mm = parseInt(parts[1], 10);
+  const yyyy = parseInt(parts[2], 10);
+  if (isNaN(dd) || isNaN(mm) || isNaN(yyyy)) return null;
+  return { dd, mm, yyyy };
+}
+
+const monthNames = [
+  "januar", "februar", "mart", "april", "maj", "jun",
+  "jul", "avgust", "septembar", "oktobar", "novembar", "decembar",
+];
+
+function applyFormat(raw, type, fmt) {
+  if (type === "T") {
+    if (fmt === "UPPER") return (raw || "").toUpperCase();
+    if (fmt === "LOWER") return (raw || "").toLowerCase();
+    if (fmt === "SENTENCE") {
+      const s = (raw || "").trim();
+      if (!s) return s;
+      return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+    }
+    return raw || "";
+  }
+
+  if (type === "D") {
+    const d = parseDDMMYYYY(raw);
+    if (!d) return raw || "";
+
+    if (fmt === "DD_MM_YYYY") return `${String(d.dd).padStart(2, "0")}.${String(d.mm).padStart(2, "0")}.${d.yyyy}`;
+    if (fmt === "DD") return String(d.dd).padStart(2, "0");
+    if (fmt === "MM") return String(d.mm).padStart(2, "0");
+    if (fmt === "YYYY") return String(d.yyyy);
+    if (fmt === "MONTH_TEXT") return monthNames[d.mm - 1] || "";
+    if (fmt === "MONTH_TEXT_YEAR") return `${monthNames[d.mm - 1] || ""} ${d.yyyy}`;
+    if (fmt === "DD_MONTH_TEXT_YYYY") return `${d.dd}. ${monthNames[d.mm - 1] || ""} ${d.yyyy}`;
+
+    return raw || "";
+  }
+
+  if (type === "N") {
+    const n = parseFloat((raw || "").replace(",", "."));
+    if (isNaN(n)) return raw || "";
+
+    if (fmt === "PLAIN_0") return n.toFixed(0);
+    if (fmt === "PLAIN_2") return n.toFixed(2);
+    if (fmt === "CUR_EUR_2") return n.toFixed(2) + " €";
+    if (fmt === "CUR_RSD_0") return n.toFixed(0) + " RSD";
+    if (fmt === "CUR_USD_2") return "$ " + n.toFixed(2);
+
+    return String(n);
+  }
+
+  return raw || "";
+}
+
+/* =========================
+   STORAGE (CustomXML)
+   ========================= */
 
 function escapeXml(s) {
   return (s || "")
@@ -477,13 +437,19 @@ async function loadFromDocument() {
       parts.load("items");
       await context.sync();
 
-      if (!parts.items.length) return;
+      if (!parts.items.length) {
+        console.log("No XML parts found in document");
+        return;
+      }
 
       const xmlRes = parts.items[0].getXml();
       await context.sync();
 
       const xml = (xmlRes && xmlRes.value) ? xmlRes.value : "";
-      if (!xml) return;
+      if (!xml) {
+        console.log("XML is empty");
+        return;
+      }
 
       const doc = new DOMParser().parseFromString(xml, "text/xml");
       const fields = Array.from(doc.getElementsByTagName("field"));
@@ -522,31 +488,38 @@ function triggerAutoSave() {
    ========================= */
 
 function exportCSV() {
-  const lines = rows.map((r) => `${r.field},${r.value}`);
+  const lines = [];
+  for (const r of rows) {
+    const f = (r.field || "").trim();
+    const v = (r.value || "").trim();
+    if (!f) continue;
+    lines.push(`${f},${v}`);
+  }
+
   const csv = lines.join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-
   const a = document.createElement("a");
   a.href = url;
-  a.download = "ba-polja.csv";
+  a.download = "biroa-fields.csv";
   a.click();
-
   URL.revokeObjectURL(url);
-  showStatus("✓ CSV eksportovan", true);
+
+  showStatus(`✓ Eksportovano ${lines.length} polja u CSV`, true);
 }
 
-function importCSV() {
+async function importCSV() {
   const input = document.createElement("input");
   input.type = "file";
-  input.accept = ".csv,text/csv";
+  input.accept = ".csv";
 
   input.onchange = async (e) => {
-    const file = e.target.files && e.target.files[0];
+    const file = e.target.files[0];
     if (!file) return;
 
     const text = await file.text();
-    const lines = text.trim().split("\n");
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
     const newRows = [];
     let id = 1;
 
@@ -777,8 +750,16 @@ function setActive(btnId) {
 }
 
 function wireUI() {
+  console.log("wireUI started");
+  
   const btnAdd = $("btnAddRow");
-  if (btnAdd) btnAdd.addEventListener("click", addRow);
+  console.log("btnAddRow element:", btnAdd);
+  if (btnAdd) {
+    btnAdd.addEventListener("click", () => {
+      console.log("btnAddRow clicked!");
+      addRow();
+    });
+  }
 
   const btnInsert = $("btnInsert");
   if (btnInsert) {
@@ -821,27 +802,35 @@ function wireUI() {
   }
 
   const btnExport = $("btnExportCSV");
+  console.log("btnExportCSV element:", btnExport);
   if (btnExport) {
     btnExport.addEventListener("click", () => {
+      console.log("btnExportCSV clicked!");
       try { exportCSV(); }
       catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
     });
   }
 
   const btnImport = $("btnImportCSV");
+  console.log("btnImportCSV element:", btnImport);
   if (btnImport) {
     btnImport.addEventListener("click", () => {
+      console.log("btnImportCSV clicked!");
       try { importCSV(); }
       catch (e) { showStatus(`⚠ Greška: ${e && e.message ? e.message : String(e)}`, true); }
     });
   }
 
   if (selectedRowId == null && rows.length) selectedRowId = rows[0].id;
+  
+  console.log("About to call renderRows, selectedRowId =", selectedRowId);
   renderRows();
   setupKeyboardShortcuts();
+  console.log("wireUI complete");
 }
 
-Office.onReady(async () => {
+Office.onReady(async (info) => {
+  console.log("Office.onReady fired, host:", info.host, "platform:", info.platform);
   wireUI();
 
   try {
