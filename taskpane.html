@@ -4,113 +4,109 @@
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <title>BiroA Word Polja</title>
-
+  <title>BiroA Word dodatak</title>
   <link rel="stylesheet" href="taskpane.css" />
 </head>
 
 <body>
   <div class="shell">
+    
+    <!-- Status bar -->
+    <div id="status" class="status" style="display:none;"></div>
 
-    <!-- Tabs -->
+    <!-- Tab buttons -->
     <div class="tabs">
-      <button id="btnInsert" class="tab active">UBACI POLJE</button>
-      <button id="btnFill" class="tab">POPUNI</button>
-      <button id="btnClear" class="tab">OČISTI</button>
-      <button id="btnDelete" class="tab danger">OBRIŠI</button>
+      <button id="btnInsert" class="tab-btn">UBACI POLJE</button>
+      <button id="btnFill" class="tab-btn">POPUNI</button>
+      <button id="btnClear" class="tab-btn">OČISTI</button>
+      <button id="btnDelete" class="tab-btn danger">OBRIŠI</button>
     </div>
 
-    <!-- Content area -->
+    <!-- Content -->
     <div class="content">
-
-      <!-- Status -->
-      <div id="status" class="status" style="display:none;"></div>
-
-      <!-- Table with header -->
-      <div class="table">
-        <div class="thead">
-          <div>Polje</div>
-          <div>Vrednost</div>
-          <div></div>
-        </div>
-        <!-- Rows container -->
-        <div id="rows"></div>
+      
+      <!-- Table header -->
+      <div class="table-header">
+        <div class="th">POLJE</div>
+        <div class="th">ODGOVOR</div>
+        <div class="th"></div>
       </div>
 
-      <!-- Button row with CSV controls -->
-      <div class="button-row">
-        <button id="btnAddRow" class="btn primary">+ Dodaj red</button>
-        <div class="csv-buttons">
-          <button id="btnExportCSV" class="btn secondary small">Export CSV</button>
-          <button id="btnImportCSV" class="btn secondary small">Import CSV</button>
+      <!-- Rows container -->
+      <div id="rows" class="table-body"></div>
+
+      <!-- Action buttons -->
+      <div class="actions">
+        <button id="btnAddRow" class="btn-primary">+ Dodaj red</button>
+        <div class="csv-group">
+          <button id="btnExportCSV" class="btn-secondary">Export CSV</button>
+          <button id="btnImportCSV" class="btn-secondary">Import CSV</button>
         </div>
       </div>
 
-      <!-- Hint section -->
-      <div class="hint">
-        <strong>Prečice:</strong><br>
-        <span class="shortcut">Ctrl+Enter</span> Ubaci polje<br>
-        <span class="shortcut">Ctrl+S</span> Sačuvaj<br>
-        <span class="shortcut">Delete</span> Obriši red<br>
-        <span class="shortcut">Ctrl+E</span> Export CSV<br>
-        <span class="shortcut">Ctrl+I</span> Import CSV
+      <!-- Help text -->
+      <div class="help">
+        <strong>UBACI POLJE:</strong> klikni red u tabeli → izaberi tip + format → klikni u dokument gde želiš polje.<br>
+        <strong>POPUNI:</strong> upiši vrednosti u tabelu i klikni POPUNI.<br>
+        <strong>OČISTI:</strong> vraća {POLJE}. <strong>OBRIŠI:</strong> uklanja kontrole, ostavlja tekst.
       </div>
 
     </div>
+
   </div>
 
+  <!-- ========== MODAL (Insert Field) ========== -->
+  <div id="modalBackdrop" class="modal-backdrop hidden"></div>
+  
+  <div id="modal" class="modal-dialog hidden">
+    <div class="modal-header">
+      <h3>Ubaci polje</h3>
+      <button id="btnModalClose" class="modal-close">×</button>
+    </div>
 
-  <!-- ================= MODAL INSERT ================= -->
-  <div id="modalOverlay" class="modal-overlay" style="display:none;">
-    <div class="modal">
-      <h3 class="modal-title">Ubaci polje</h3>
-
-      <div class="modal-row">
-        <div class="modal-label">Polje:</div>
-        <span id="modalFieldName" class="modal-pill"></span>
+    <div class="modal-body">
+      
+      <!-- Field name -->
+      <div class="field-name-box">
+        <span id="modalFieldName" class="field-name-pill"></span>
       </div>
 
-      <div class="modal-row">
-        <label class="modal-label" for="modalType">Tip:</label>
-        <select id="modalType" class="modal-select">
-          <option value="T">Tekst</option>
-          <option value="D">Datum</option>
-          <option value="N">Broj</option>
-        </select>
+      <!-- Type selection (radio buttons) -->
+      <div class="form-group">
+        <label class="form-label">Tip podatka:</label>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input type="radio" name="ftype" value="text" checked />
+            <span>Tekst</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="ftype" value="date" />
+            <span>Datum</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="ftype" value="number" />
+            <span>Broj</span>
+          </label>
+        </div>
       </div>
 
-      <div class="modal-row">
-        <label class="modal-label" for="modalFormat">Format:</label>
-        <select id="modalFormat" class="modal-select"></select>
+      <!-- Format selection -->
+      <div class="form-group">
+        <label class="form-label" for="formatSelect">Format:</label>
+        <select id="formatSelect" class="form-select"></select>
+        <div id="formatHint" class="format-hint"></div>
       </div>
 
-      <div class="modal-actions">
-        <button id="modalCancel" class="btn secondary">Otkaži</button>
-        <button id="modalOk" class="btn primary">OK</button>
-      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button id="btnModalCancel" class="btn-secondary">Otkaži</button>
+      <button id="btnModalOk" class="btn-primary">OK</button>
     </div>
   </div>
 
-
-  <!-- ================= CONFIRM TODAY ================= -->
-  <div id="confirmOverlay" class="modal-overlay" style="display:none;">
-    <div class="modal">
-      <h3 class="modal-title">Potvrdi datum</h3>
-      <p id="confirmText" class="confirm-text"></p>
-      <div class="modal-actions">
-        <button id="confirmNo" class="btn secondary">Ne</button>
-        <button id="confirmYes" class="btn primary">Da</button>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- ================= SCRIPTS ================= -->
-  <!-- Office runtime -->
+  <!-- Scripts -->
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-
-  <!-- Tvoj kod -->
   <script src="taskpane.js"></script>
 
 </body>

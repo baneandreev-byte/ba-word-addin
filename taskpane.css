@@ -1,4 +1,4 @@
-/* Base styles */
+/* ========== Base ========== */
 * {
   margin: 0;
   padding: 0;
@@ -19,99 +19,109 @@ body {
   height: 100vh;
 }
 
-/* Tabs */
+.hidden {
+  display: none !important;
+}
+
+/* ========== Status Bar ========== */
+.status {
+  padding: 12px 16px;
+  margin: 12px 16px 0;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px solid #93c5fd;
+  background: #eff6ff;
+  color: #111827;
+}
+
+/* ========== Tabs ========== */
 .tabs {
   display: flex;
   background: #fff;
   border-bottom: 2px solid #e5e7eb;
-  padding: 0;
 }
 
-.tab {
+.tab-btn {
   flex: 1;
   border: none;
   background: #fff;
-  padding: 12px 8px;
+  padding: 14px 8px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   color: #6b7280;
   transition: all 0.2s;
   border-bottom: 3px solid transparent;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.tab:hover {
+.tab-btn:hover {
   background: #f3f4f6;
   color: #374151;
 }
 
-.tab.active {
-  color: #2563eb;
-  border-bottom-color: #2563eb;
-  background: #eff6ff;
+.tab-btn:active,
+.tab-btn:focus {
+  outline: none;
 }
 
-.tab.danger {
+.tab-btn.danger {
   color: #dc2626;
 }
 
-.tab.danger:hover {
+.tab-btn.danger:hover {
   background: #fef2f2;
 }
 
-.tab.danger.active {
-  border-bottom-color: #dc2626;
-  background: #fef2f2;
-}
-
-/* Content area */
+/* ========== Content Area ========== */
 .content {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
 }
 
-/* Status bar */
-.status {
-  padding: 12px;
-  margin-bottom: 16px;
-  background: #eff6ff;
-  border: 1px solid #93c5fd;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #1e40af;
-  line-height: 1.5;
-}
-
-/* Table */
-.table {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  overflow: hidden;
-  margin-bottom: 12px;
-}
-
-.thead {
+/* ========== Table ========== */
+.table-header {
   display: grid;
-  grid-template-columns: 1fr 1fr 40px;
-  gap: 8px;
-  padding: 10px 12px;
+  grid-template-columns: 1fr 1fr 48px;
+  gap: 12px;
+  padding: 10px 14px;
   background: #f3f4f6;
-  font-weight: 600;
-  font-size: 12px;
+  border-radius: 8px 8px 0 0;
+  font-weight: 700;
+  font-size: 11px;
   color: #6b7280;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
+  margin-bottom: 0;
+}
+
+.th {
+  display: flex;
+  align-items: center;
+}
+
+.table-body {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  margin-bottom: 16px;
 }
 
 .row {
   display: grid;
-  grid-template-columns: 1fr 1fr 40px;
-  gap: 8px;
-  padding: 8px 12px;
+  grid-template-columns: 1fr 1fr 48px;
+  gap: 12px;
+  padding: 10px 14px;
   border-top: 1px solid #e5e7eb;
   transition: background 0.15s;
+}
+
+.row:first-child {
+  border-top: none;
 }
 
 .row:hover {
@@ -127,8 +137,8 @@ body {
   width: 100%;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  padding: 8px 10px;
-  font-size: 13px;
+  padding: 9px 12px;
+  font-size: 14px;
   font-family: inherit;
   color: #1f2937;
   background: #fff;
@@ -143,6 +153,7 @@ body {
 
 .cell input::placeholder {
   color: #9ca3af;
+  font-style: italic;
 }
 
 .del {
@@ -152,13 +163,14 @@ body {
 }
 
 .del button {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border: none;
   background: #fee2e2;
   color: #dc2626;
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1;
   cursor: pointer;
   border-radius: 6px;
   transition: all 0.2s;
@@ -169,15 +181,15 @@ body {
 
 .del button:hover {
   background: #fecaca;
-  transform: scale(1.05);
+  transform: scale(1.08);
 }
 
 .del button:active {
   transform: scale(0.95);
 }
 
-/* Button row with CSV buttons */
-.button-row {
+/* ========== Action Buttons ========== */
+.actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -185,15 +197,15 @@ body {
   margin-bottom: 16px;
 }
 
-.csv-buttons {
+.csv-group {
   display: flex;
   gap: 8px;
 }
 
-/* Buttons */
-.btn {
+.btn-primary,
+.btn-secondary {
   border: none;
-  padding: 10px 16px;
+  padding: 11px 18px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -203,120 +215,210 @@ body {
   white-space: nowrap;
 }
 
-.btn.small {
-  padding: 8px 12px;
-  font-size: 12px;
-}
-
-.btn.primary {
+.btn-primary {
   background: #2563eb;
   color: #fff;
 }
 
-.btn.primary:hover {
+.btn-primary:hover {
   background: #1d4ed8;
   transform: translateY(-1px);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3);
 }
 
-.btn.primary:active {
+.btn-primary:active {
   transform: translateY(0);
 }
 
-.btn.secondary {
+.btn-secondary {
   background: #f3f4f6;
   color: #374151;
   border: 1px solid #d1d5db;
 }
 
-.btn.secondary:hover {
+.btn-secondary:hover {
   background: #e5e7eb;
+  border-color: #9ca3af;
 }
 
-/* Hint section */
-.hint {
+.btn-secondary:active {
+  background: #d1d5db;
+}
+
+/* ========== Help Text ========== */
+.help {
   background: #f9fafb;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 14px;
   font-size: 12px;
-  line-height: 1.7;
+  line-height: 1.8;
   color: #6b7280;
 }
 
-.hint strong {
+.help strong {
   color: #374151;
   font-weight: 600;
 }
 
-.shortcut {
-  display: inline-block;
-  background: #374151;
-  color: #fff;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  margin-right: 4px;
-  font-family: "Courier New", monospace;
-}
-
-/* Modal overlay */
-.modal-overlay {
+/* ========== Modal Backdrop ========== */
+.modal-backdrop {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 999;
   padding: 20px;
 }
 
-.modal {
+/* ========== Modal Dialog ========== */
+.modal-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   background: #fff;
   border-radius: 12px;
-  padding: 24px;
-  max-width: 400px;
-  width: 100%;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  width: 90%;
+  max-width: 440px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
 }
 
-.modal-title {
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h3 {
   font-size: 18px;
   font-weight: 700;
   color: #1f2937;
-  margin-bottom: 20px;
+  margin: 0;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f3f4f6;
+  color: #6b7280;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-close:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid #e5e7eb;
+  justify-content: flex-end;
+}
+
+/* ========== Modal: Field Name Display ========== */
+.field-name-box {
+  margin-bottom: 24px;
   text-align: center;
 }
 
-.modal-row {
-  margin-bottom: 16px;
+.field-name-pill {
+  display: inline-block;
+  background: #eff6ff;
+  color: #1e40af;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 15px;
+  border: 2px solid #93c5fd;
+  font-family: "Courier New", monospace;
 }
 
-.modal-label {
+/* ========== Modal: Form Groups ========== */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
   display: block;
   font-size: 13px;
   font-weight: 600;
   color: #374151;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
-.modal-pill {
-  display: inline-block;
-  background: #eff6ff;
-  color: #1e40af;
-  padding: 8px 16px;
-  border-radius: 20px;
+/* ========== Radio Buttons ========== */
+.radio-group {
+  display: flex;
+  gap: 16px;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 10px 14px;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  transition: all 0.2s;
+  flex: 1;
+  justify-content: center;
+}
+
+.radio-label:hover {
+  border-color: #93c5fd;
+  background: #f9fafb;
+}
+
+.radio-label input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #2563eb;
+}
+
+.radio-label input[type="radio"]:checked + span {
   font-weight: 600;
-  font-size: 14px;
-  border: 2px solid #93c5fd;
+  color: #1e40af;
 }
 
-.modal-select {
+.radio-label:has(input:checked) {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.radio-label span {
+  font-size: 14px;
+  color: #374151;
+  transition: all 0.2s;
+}
+
+/* ========== Select Dropdown ========== */
+.form-select {
   width: 100%;
   border: 1px solid #d1d5db;
   border-radius: 8px;
@@ -329,32 +431,22 @@ body {
   transition: all 0.2s;
 }
 
-.modal-select:focus {
+.form-select:focus {
   outline: none;
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
-.modal-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 24px;
+/* ========== Format Hint ========== */
+.format-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
+  min-height: 18px;
 }
 
-.modal-actions .btn {
-  flex: 1;
-}
-
-.confirm-text {
-  font-size: 14px;
-  line-height: 1.6;
-  color: #374151;
-  text-align: center;
-  white-space: pre-line;
-  padding: 12px 0;
-}
-
-/* Scrollbar styling */
+/* ========== Scrollbar ========== */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -370,9 +462,4 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
-}
-
-/* Hidden class */
-.hidden {
-  display: none !important;
 }
