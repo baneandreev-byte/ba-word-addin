@@ -21,42 +21,73 @@
       <button id="btnDelete" class="tab danger">OBRIŠI</button>
     </div>
 
-    <!-- Status -->
-    <div id="status" class="status" style="display:none;"></div>
+    <!-- Content area -->
+    <div class="content">
 
-    <!-- Table -->
-    <div id="rows" class="rows"></div>
+      <!-- Status -->
+      <div id="status" class="status" style="display:none;"></div>
 
-    <!-- Controls -->
-    <div class="toolbar">
-      <button id="btnAddRow">+ Dodaj red</button>
-      <button id="btnExportCSV">Export CSV</button>
-      <button id="btnImportCSV">Import CSV</button>
+      <!-- Table with header -->
+      <div class="table">
+        <div class="thead">
+          <div>Polje</div>
+          <div>Vrednost</div>
+          <div></div>
+        </div>
+        <!-- Rows container -->
+        <div id="rows"></div>
+      </div>
+
+      <!-- Button row with CSV controls -->
+      <div class="button-row">
+        <button id="btnAddRow" class="btn primary">+ Dodaj red</button>
+        <div class="csv-buttons">
+          <button id="btnExportCSV" class="btn secondary small">Export CSV</button>
+          <button id="btnImportCSV" class="btn secondary small">Import CSV</button>
+        </div>
+      </div>
+
+      <!-- Hint section -->
+      <div class="hint">
+        <strong>Prečice:</strong><br>
+        <span class="shortcut">Ctrl+Enter</span> Ubaci polje<br>
+        <span class="shortcut">Ctrl+S</span> Sačuvaj<br>
+        <span class="shortcut">Delete</span> Obriši red<br>
+        <span class="shortcut">Ctrl+E</span> Export CSV<br>
+        <span class="shortcut">Ctrl+I</span> Import CSV
+      </div>
+
     </div>
-
   </div>
 
 
   <!-- ================= MODAL INSERT ================= -->
   <div id="modalOverlay" class="modal-overlay" style="display:none;">
     <div class="modal">
-      <h3>Ubaci polje</h3>
+      <h3 class="modal-title">Ubaci polje</h3>
 
-      <p><b id="modalFieldName"></b></p>
+      <div class="modal-row">
+        <div class="modal-label">Polje:</div>
+        <span id="modalFieldName" class="modal-pill"></span>
+      </div>
 
-      <label>Tip:</label>
-      <select id="modalType">
-        <option value="T">Tekst</option>
-        <option value="D">Datum</option>
-        <option value="N">Broj</option>
-      </select>
+      <div class="modal-row">
+        <label class="modal-label" for="modalType">Tip:</label>
+        <select id="modalType" class="modal-select">
+          <option value="T">Tekst</option>
+          <option value="D">Datum</option>
+          <option value="N">Broj</option>
+        </select>
+      </div>
 
-      <label>Format:</label>
-      <select id="modalFormat"></select>
+      <div class="modal-row">
+        <label class="modal-label" for="modalFormat">Format:</label>
+        <select id="modalFormat" class="modal-select"></select>
+      </div>
 
-      <div class="modal-buttons">
-        <button id="modalOk">OK</button>
-        <button id="modalCancel">Otkaži</button>
+      <div class="modal-actions">
+        <button id="modalCancel" class="btn secondary">Otkaži</button>
+        <button id="modalOk" class="btn primary">OK</button>
       </div>
     </div>
   </div>
@@ -65,10 +96,11 @@
   <!-- ================= CONFIRM TODAY ================= -->
   <div id="confirmOverlay" class="modal-overlay" style="display:none;">
     <div class="modal">
-      <p id="confirmText"></p>
-      <div class="modal-buttons">
-        <button id="confirmYes">Da</button>
-        <button id="confirmNo">Ne</button>
+      <h3 class="modal-title">Potvrdi datum</h3>
+      <p id="confirmText" class="confirm-text"></p>
+      <div class="modal-actions">
+        <button id="confirmNo" class="btn secondary">Ne</button>
+        <button id="confirmYes" class="btn primary">Da</button>
       </div>
     </div>
   </div>
@@ -78,7 +110,7 @@
   <!-- Office runtime -->
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 
-  <!-- Tvoj kod (OBAVEZNO) -->
+  <!-- Tvoj kod -->
   <script src="taskpane.js"></script>
 
 </body>
