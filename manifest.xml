@@ -6,7 +6,7 @@
   xsi:type="TaskPaneApp">
 
   <Id>10118cd9-088f-498a-aae7-05c50d6d258a</Id>
-  <Version>1.0.0.9</Version>
+  <Version>1.0.0.10</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
@@ -31,7 +31,6 @@
 
   <Permissions>ReadWriteDocument</Permissions>
 
-  <!-- VersionOverrides bez prefiksa, sa default namespace -->
   <VersionOverrides
     xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
     xsi:type="VersionOverridesV1_0">
@@ -52,6 +51,13 @@
             <OfficeTab id="TabHome">
               <Group id="BiroA.Group">
                 <Label resid="BiroA.Group.Label"/>
+
+                <!-- OBAVEZNO: Group Icon mora da postoji pre Control -->
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16"/>
+                  <bt:Image size="32" resid="Icon.32"/>
+                  <bt:Image size="80" resid="Icon.80"/>
+                </Icon>
 
                 <Control xsi:type="Button" id="BiroA.Button">
                   <Label resid="BiroA.Button.Label"/>
