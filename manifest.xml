@@ -3,11 +3,10 @@
   xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
-  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
   xsi:type="TaskPaneApp">
 
   <Id>10118cd9-088f-498a-aae7-05c50d6d258a</Id>
-  <Version>1.0.0.6</Version>
+  <Version>1.0.0.9</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
@@ -19,7 +18,6 @@
   <SupportUrl DefaultValue="https://baneandreev-byte.github.io/ba-word-addin"/>
 
   <AppDomains>
-    <!-- AppDomain mora biti samo origin (bez /ba-word-addin) -->
     <AppDomain>https://baneandreev-byte.github.io</AppDomain>
   </AppDomains>
 
@@ -33,52 +31,53 @@
 
   <Permissions>ReadWriteDocument</Permissions>
 
-  <ov:VersionOverrides xsi:type="VersionOverridesV1_0">
-    <ov:Requirements>
+  <!-- VersionOverrides bez prefiksa, sa default namespace -->
+  <VersionOverrides
+    xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+    xsi:type="VersionOverridesV1_0">
+
+    <Requirements>
       <bt:Sets DefaultMinVersion="1.1">
         <bt:Set Name="WordApi"/>
       </bt:Sets>
-    </ov:Requirements>
+    </Requirements>
 
-    <ov:Hosts>
-      <ov:Host xsi:type="Document">
-        <ov:DesktopFormFactor>
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
 
-          <!-- OBAVEZNO za ribbon commands -->
-          <ov:FunctionFile resid="Commands.Url"/>
+          <FunctionFile resid="Commands.Url"/>
 
-          <ov:ExtensionPoint xsi:type="PrimaryCommandSurface">
-            <ov:OfficeTab id="TabHome">
-              <ov:Group id="BiroA.Group">
-                <ov:Label resid="BiroA.Group.Label"/>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="BiroA.Group">
+                <Label resid="BiroA.Group.Label"/>
 
-                <ov:Control xsi:type="Button" id="BiroA.Button">
-                  <ov:Label resid="BiroA.Button.Label"/>
-                  <ov:Supertip>
-                    <ov:Title resid="BiroA.Button.Label"/>
-                    <ov:Description resid="BiroA.Button.Desc"/>
-                  </ov:Supertip>
-
-                  <ov:Icon>
+                <Control xsi:type="Button" id="BiroA.Button">
+                  <Label resid="BiroA.Button.Label"/>
+                  <Supertip>
+                    <Title resid="BiroA.Button.Label"/>
+                    <Description resid="BiroA.Button.Desc"/>
+                  </Supertip>
+                  <Icon>
                     <bt:Image size="16" resid="Icon.16"/>
                     <bt:Image size="32" resid="Icon.32"/>
                     <bt:Image size="80" resid="Icon.80"/>
-                  </ov:Icon>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
 
-                  <ov:Action xsi:type="ShowTaskpane">
-                    <ov:SourceLocation resid="Taskpane.Url"/>
-                  </ov:Action>
-                </ov:Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
 
-              </ov:Group>
-            </ov:OfficeTab>
-          </ov:ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
 
-        </ov:DesktopFormFactor>
-      </ov:Host>
-    </ov:Hosts>
-
-    <ov:Resources>
+    <Resources>
       <bt:Images>
         <bt:Image id="Icon.16" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/assets/icon-16.png"/>
         <bt:Image id="Icon.32" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/assets/icon-32.png"/>
@@ -98,6 +97,7 @@
       <bt:LongStrings>
         <bt:String id="BiroA.Button.Desc" DefaultValue="Upravljanje pametnim poljima"/>
       </bt:LongStrings>
-    </ov:Resources>
-  </ov:VersionOverrides>
+    </Resources>
+
+  </VersionOverrides>
 </OfficeApp>
