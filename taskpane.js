@@ -500,27 +500,8 @@ async function fillFieldsFromTable() {
 }
 
 async function clearFieldsKeepControls() {
-  await Word.run(async (context) => {
-    const ccs = context.document.contentControls;
-    ccs.load("items/tag");
-    await context.sync();
-
-    let cleared = 0;
-    for (const cc of ccs.items) {
-      const meta = parseTag(cc.tag || "");
-      if (!meta) continue;
-      cc.getRange().insertText(token(meta.key), Word.InsertLocation.replace);
-      cleared++;
-    }
-    await context.sync();
-    setStatus(`Očišćeno ${cleared} polja.`, "info");
-  });
-
-  await saveStateToDocument();
-}
-
-async function deleteControlsLeaveTextAndXml() {
-  const map = buildValueMap();
+  // obriši vrednosti u desnoj tabeli (UI)
+  rows = rows.map((r) => ({ ...r, value: "" }));
   renderRows();
 
   await Word.run(async (context) => {
@@ -528,43 +509,76 @@ async function deleteControlsLeaveTextAndXml() {
     ccs.load("items/tag");
     await context.sync();
 
-    let removed = 0;
+    let cleared = 0;
+
     for (const cc of ccs.items) {
       const meta = parseTag(cc.tag || "");
       if (!meta) continue;
-      const out = map.get(meta.key)?.formatted ?? "";
+
+      // vrati token {POLJE}
+      cc.getRange().insertText(token(meta.key), Word.InsertLocation.replace);
+      cleared++;
+    }
+
+    await context.sync();
+    setStatus(`Očišćeno ${cleared} polja i vrednosti.`, "info");
+  });
+
+  await saveStateToDocument();
+}
+
+async function deleteControlsLeaveTextAndXml() {
+  const map = new Map();
+
+  for (const r of rows) {
+    const key = normalizeKey(r.field);
+    if (!key) continue;
+
+    const val = (r.value ?? "").trim();
+    map.set(key, val || "");
+  }
+
+  await Word.run(async (context) => {
+    const ccs = context.document.contentControls;
+    ccs.load("items/tag");
+    await context.sync();
+
+    let removed = 0;
+
+    for (const cc of ccs.items) {
+      const meta = parseTag(cc.tag || "");
+      if (!meta) continue;
+
+      const out = map.get(meta.key) ?? "";
+
       cc.getRange().insertText(out, Word.InsertLocation.replace);
-      cc.delete(false);
+      cc.delete(false); // ukloni kontrolu
       removed++;
     }
+
     await context.sync();
-    setStatus(`Obrisane kontrole: ${removed}.`, "info");
+    setStatus(`Uklonjeno ${removed} kontrola. Dokument je čist.`, "info");
   });
 
   await deleteSavedStateFromDocument();
-  setStatus("Obrisane kontrole i obrisani sačuvani podaci (XML).", "info");
+
+  rows = [{ id: 1, field: "", value: "", type: "text", format: "text:auto" }];
+  renderRows();
 }
 
 // ---------- CSV Import/Export ----------
 function exportCSV() {
-  const lines = [];
-  for (const r of rows) {
-    const f = (r.field || "").trim();
-    const v = (r.value || "").trim();
-    if (!f) continue;
-    lines.push(`${f},${v}`);
-  }
+  const lines = rows
+    .filter(r => r.field)
+    .map(r => `${r.field};${r.value}`);
 
-  const csv = lines.join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = "biroa-fields.csv";
   a.click();
-  URL.revokeObjectURL(url);
-
-  setStatus(`Eksportovano ${lines.length} polja u CSV.`, "info");
 }
 
 async function importCSV() {
@@ -583,7 +597,7 @@ async function importCSV() {
     let id = 1;
 
     for (const line of lines) {
-      const parts = line.split(",");
+      const parts = line.split(";");
       const field = (parts[0] || "").trim();
       const value = (parts.slice(1).join(",") || "").trim();
       if (field) {
