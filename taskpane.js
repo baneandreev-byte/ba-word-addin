@@ -1,9 +1,9 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V20
+// VERZIJA: 2025-02-07 - V21
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V20");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V21");
 console.log("✅ Funkcije: Ubaci, Popuni (editabilno), Očisti (čuva vrednosti), Obriši (potvrda)");
 
 let rows = [];
