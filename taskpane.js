@@ -1,5 +1,11 @@
 /* global Office, Word */
 
+// ============================================
+// VERZIJA: 2025-02-07-V19
+// ============================================
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 v3.1");
+console.log("✅ Funkcije: Ubaci, Popuni (editabilno), Očisti (čuva vrednosti), Obriši (potvrda)");
+
 let rows = [
   { id: 1, field: "", value: "", type: "text", format: "text:auto" },
   { id: 2, field: "", value: "", type: "text", format: "text:auto" },
@@ -420,6 +426,8 @@ async function scanFieldsFromDocument() {
 }
 
 async function fillFieldsFromTable() {
+  console.log("🔵 fillFieldsFromTable() POZVANA - NOVA VERZIJA (cc.insertText direktno)");
+  
   // map: key -> { raw, formatted }
   const map = buildValueMap();
   renderRows();
@@ -439,12 +447,14 @@ async function fillFieldsFromTable() {
       const out = map.get(meta.key)?.formatted ?? token(meta.key);
 
       // KLJUČNO: menjamo sadržaj KONTROLE, ne range.clear()
+      console.log(`  - Popunjavam polje "${meta.key}" sa: "${out}"`);
       cc.insertText(out, Word.InsertLocation.replace);
 
       filled++;
     }
 
     await context.sync();
+    console.log(`✅ Popunjeno ${filled} polja`);
     setStatus(`Popunjeno ${filled} polja.`, "info");
   });
 
