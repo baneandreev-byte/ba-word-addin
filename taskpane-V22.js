@@ -1,9 +1,9 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V21
+// VERZIJA: 2025-02-07 - V22
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V21");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V22");
 console.log("✅ Funkcije: Ubaci, Popuni (editabilno), Očisti (čuva vrednosti), Obriši (potvrda)");
 
 let rows = [];
@@ -145,15 +145,14 @@ function renderRows() {
 
   rows.forEach((r, idx) => {
     const row = document.createElement("div");
-    row.className = "table-row";
+    row.className = "row";  // PROMENJENO sa "table-row"
     if (idx === selectedRowIndex) row.classList.add("selected");
 
     // Field column
     const fieldCell = document.createElement("div");
-    fieldCell.className = "table-cell";
+    fieldCell.className = "cell";  // PROMENJENO sa "table-cell"
     const fieldInput = document.createElement("input");
     fieldInput.type = "text";
-    fieldInput.className = "cell-input";
     fieldInput.placeholder = "Naziv polja";
     fieldInput.value = r.field || "";
     fieldInput.addEventListener("input", (e) => {
@@ -164,10 +163,9 @@ function renderRows() {
 
     // Value column
     const valueCell = document.createElement("div");
-    valueCell.className = "table-cell";
+    valueCell.className = "cell";  // PROMENJENO sa "table-cell"
     const valueInput = document.createElement("input");
     valueInput.type = "text";
-    valueInput.className = "cell-input";
     valueInput.placeholder = "Vrednost";
     valueInput.value = r.value || "";
     valueInput.addEventListener("input", (e) => {
@@ -178,20 +176,36 @@ function renderRows() {
 
     // Actions column
     const actionsCell = document.createElement("div");
-    actionsCell.className = "table-cell actions-cell";
+    actionsCell.className = "del";  // PROMENJENO sa "table-cell actions-cell"
     
     const btnEdit = document.createElement("button");
-    btnEdit.className = "btn-icon";
-    btnEdit.innerHTML = "⚙️";
+    btnEdit.innerHTML = "⚙";  // Jednostavan ASCII umesto emoji
     btnEdit.title = "Podešavanja (tip, format)";
+    btnEdit.style.marginRight = "4px";
+    btnEdit.style.width = "36px";
+    btnEdit.style.height = "36px";
+    btnEdit.style.border = "none";
+    btnEdit.style.background = "#e0f2fe";
+    btnEdit.style.color = "#0369a1";
+    btnEdit.style.fontSize = "18px";
+    btnEdit.style.cursor = "pointer";
+    btnEdit.style.borderRadius = "6px";
+    btnEdit.style.transition = "all 0.2s";
+    btnEdit.addEventListener("mouseover", () => {
+      btnEdit.style.background = "#bae6fd";
+      btnEdit.style.transform = "scale(1.08)";
+    });
+    btnEdit.addEventListener("mouseout", () => {
+      btnEdit.style.background = "#e0f2fe";
+      btnEdit.style.transform = "scale(1)";
+    });
     btnEdit.addEventListener("click", () => {
       selectedRowIndex = idx;
       openModal(r);
     });
 
     const btnDelete = document.createElement("button");
-    btnDelete.className = "btn-icon";
-    btnDelete.innerHTML = "🗑️";
+    btnDelete.innerHTML = "×";  // X umesto emoji
     btnDelete.title = "Obriši red";
     btnDelete.addEventListener("click", () => {
       if (confirm(`Obrisati polje "${r.field}"?`)) {
