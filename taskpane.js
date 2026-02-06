@@ -1,10 +1,11 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V23
+// VERZIJA: 2025-02-07 - V27 (FIX ROW SELECTION)
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V23");
-console.log("✅ Funkcije: Ubaci, Popuni (editabilno), Očisti (čuva vrednosti), Obriši (potvrda)");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V27");
+console.log("✅ FIX: Klik na red sada selektuje polje za ubacivanje");
+console.log("✅ FIX: Dugme OBRIŠI sada korektno briše content controls i ostavlja tekst");
 
 let rows = [];
 let selectedRowIndex = null;
@@ -195,6 +196,13 @@ function renderRows() {
   const container = el("rows");
   if (!container) return;
 
+  // Sačuvaj trenutni focus
+  const activeElement = document.activeElement;
+  const wasFieldInput = activeElement && activeElement.placeholder === "Naziv polja";
+  const wasValueInput = activeElement && activeElement.placeholder === "Vrednost";
+  const focusedRowIndex = wasFieldInput || wasValueInput ? 
+    Array.from(container.querySelectorAll('.row')).indexOf(activeElement.closest('.row')) : -1;
+
   container.innerHTML = "";
 
   if (rows.length === 0) {
@@ -204,12 +212,18 @@ function renderRows() {
 
   rows.forEach((r, idx) => {
     const row = document.createElement("div");
-    row.className = "row";  // PROMENJENO sa "table-row"
+    row.className = "row";
     if (idx === selectedRowIndex) row.classList.add("selected");
+
+    // Click handler na ceo red - selektuje red za ubacivanje
+    row.addEventListener("click", () => {
+      selectedRowIndex = idx;
+      renderRows(); // Re-render da se prikaže selected klasa
+    });
 
     // Field column
     const fieldCell = document.createElement("div");
-    fieldCell.className = "cell";  // PROMENJENO sa "table-cell"
+    fieldCell.className = "cell";
     const fieldInput = document.createElement("input");
     fieldInput.type = "text";
     fieldInput.placeholder = "Naziv polja";
@@ -218,11 +232,26 @@ function renderRows() {
       r.field = e.target.value;
       saveStateToDocument();
     });
+    // Selektuj red kada se klikne na input
+    fieldInput.addEventListener("click", (e) => {
+      e.stopPropagation(); // Spreči dupli event
+      if (selectedRowIndex !== idx) {
+        selectedRowIndex = idx;
+        renderRows();
+      }
+    });
+    // Selektuj red kada input dobije focus
+    fieldInput.addEventListener("focus", () => {
+      if (selectedRowIndex !== idx) {
+        selectedRowIndex = idx;
+        renderRows();
+      }
+    });
     fieldCell.appendChild(fieldInput);
 
     // Value column
     const valueCell = document.createElement("div");
-    valueCell.className = "cell";  // PROMENJENO sa "table-cell"
+    valueCell.className = "cell";
     const valueInput = document.createElement("input");
     valueInput.type = "text";
     valueInput.placeholder = "Vrednost";
@@ -231,14 +260,29 @@ function renderRows() {
       r.value = e.target.value;
       saveStateToDocument();
     });
+    // Selektuj red kada se klikne na input
+    valueInput.addEventListener("click", (e) => {
+      e.stopPropagation(); // Spreči dupli event
+      if (selectedRowIndex !== idx) {
+        selectedRowIndex = idx;
+        renderRows();
+      }
+    });
+    // Selektuj red kada input dobije focus
+    valueInput.addEventListener("focus", () => {
+      if (selectedRowIndex !== idx) {
+        selectedRowIndex = idx;
+        renderRows();
+      }
+    });
     valueCell.appendChild(valueInput);
 
     // Actions column
     const actionsCell = document.createElement("div");
-    actionsCell.className = "del";  // PROMENJENO sa "table-cell actions-cell"
+    actionsCell.className = "del";
     
     const btnEdit = document.createElement("button");
-    btnEdit.innerHTML = "⚙";  // Jednostavan ASCII umesto emoji
+    btnEdit.innerHTML = "⚙";
     btnEdit.title = "Podešavanja (tip, format)";
     btnEdit.style.marginRight = "4px";
     btnEdit.style.width = "36px";
@@ -264,7 +308,7 @@ function renderRows() {
     });
 
     const btnDelete = document.createElement("button");
-    btnDelete.innerHTML = "×";  // X umesto emoji
+    btnDelete.innerHTML = "×";
     btnDelete.title = "Obriši red";
     btnDelete.addEventListener("click", () => {
       if (confirm(`Obrisati polje "${r.field}"?`)) {
@@ -284,65 +328,67 @@ function renderRows() {
 
     container.appendChild(row);
   });
+
+  // Vrati focus ako je bio aktivan
+  if (focusedRowIndex >= 0 && focusedRowIndex < rows.length) {
+    const allRows = container.querySelectorAll('.row');
+    const targetRow = allRows[focusedRowIndex];
+    if (targetRow) {
+      if (wasFieldInput) {
+        const fieldInput = targetRow.querySelector('input[placeholder="Naziv polja"]');
+        if (fieldInput) setTimeout(() => fieldInput.focus(), 0);
+      } else if (wasValueInput) {
+        const valueInput = targetRow.querySelector('input[placeholder="Vrednost"]');
+        if (valueInput) setTimeout(() => valueInput.focus(), 0);
+      }
+    }
+  }
 }
 
 // ---------- modal ----------
 function openModal(row) {
   const modal = el("modal");
   const backdrop = el("modalBackdrop");
-  const fieldName = el("modalFieldName");
+  const fieldNameSpan = el("modalFieldName");
   const formatSelect = el("formatSelect");
   const formatHint = el("formatHint");
 
   if (!modal || !backdrop) return;
 
-  // Show modal
-  modal.classList.remove("hidden");
-  backdrop.classList.remove("hidden");
+  // Display field name
+  if (fieldNameSpan) {
+    fieldNameSpan.textContent = row.field || "(bez naziva)";
+  }
 
-  // Set field name
-  fieldName.textContent = row.field || "Neimenovano polje";
-
-  // Set radio buttons
+  // Set radio button for type
   const radios = document.querySelectorAll('input[name="ftype"]');
   radios.forEach((r) => {
-    r.checked = r.value === (row.type || "text");
+    r.checked = r.value === row.type;
   });
 
   // Populate format dropdown
-  updateFormatOptions(row.type || "text");
-  formatSelect.value = row.format || "text:auto";
-  updateFormatHint();
+  updateFormatOptions(row.type, row.format);
 
-  // Event listeners
+  // Listen to type changes
   radios.forEach((r) => {
     r.addEventListener("change", () => {
-      updateFormatOptions(r.value);
-      updateFormatHint();
+      updateFormatOptions(r.value, null);
     });
   });
 
-  formatSelect.addEventListener("change", updateFormatHint);
-
-  function updateFormatOptions(type) {
-    formatSelect.innerHTML = "";
-    const options = FORMAT_OPTIONS[type] || FORMAT_OPTIONS.text;
-    options.forEach((opt) => {
-      const option = document.createElement("option");
-      option.value = opt.value;
-      option.textContent = opt.label;
-      formatSelect.appendChild(option);
+  // Listen to format changes for hint
+  if (formatSelect) {
+    formatSelect.addEventListener("change", () => {
+      const selectedOption = formatSelect.options[formatSelect.selectedIndex];
+      if (formatHint && selectedOption) {
+        formatHint.textContent = selectedOption.getAttribute("data-hint") || "";
+      }
     });
-    formatSelect.value = options[0].value;
   }
 
-  function updateFormatHint() {
-    const type = document.querySelector('input[name="ftype"]:checked').value;
-    const format = formatSelect.value;
-    const options = FORMAT_OPTIONS[type] || FORMAT_OPTIONS.text;
-    const opt = options.find((o) => o.value === format);
-    formatHint.textContent = opt?.hint || "";
-  }
+  // Show modal
+  modal.classList.remove("hidden");
+  backdrop.classList.remove("hidden");
 }
 
 function closeModal() {
@@ -352,48 +398,78 @@ function closeModal() {
   if (backdrop) backdrop.classList.add("hidden");
 }
 
+function updateFormatOptions(type, currentFormat) {
+  const formatSelect = el("formatSelect");
+  const formatHint = el("formatHint");
+  if (!formatSelect) return;
+
+  formatSelect.innerHTML = "";
+
+  const opts = FORMAT_OPTIONS[type] || FORMAT_OPTIONS.text;
+  opts.forEach((opt) => {
+    const option = document.createElement("option");
+    option.value = opt.value;
+    option.textContent = opt.label;
+    option.setAttribute("data-hint", opt.hint);
+    if (currentFormat && opt.value === currentFormat) {
+      option.selected = true;
+    }
+    formatSelect.appendChild(option);
+  });
+
+  // Set hint for selected option
+  if (formatHint) {
+    const selectedOption = formatSelect.options[formatSelect.selectedIndex];
+    formatHint.textContent = selectedOption ? selectedOption.getAttribute("data-hint") || "" : "";
+  }
+}
+
 function saveModalChanges() {
   if (selectedRowIndex === null) return;
 
   const row = rows[selectedRowIndex];
-  const type = document.querySelector('input[name="ftype"]:checked').value;
-  const format = el("formatSelect").value;
+  
+  // Get selected type
+  const checkedRadio = document.querySelector('input[name="ftype"]:checked');
+  if (checkedRadio) {
+    row.type = checkedRadio.value;
+  }
 
-  row.type = type;
-  row.format = format;
+  // Get selected format
+  const formatSelect = el("formatSelect");
+  if (formatSelect) {
+    row.format = formatSelect.value;
+  }
 
   closeModal();
   renderRows();
   saveStateToDocument();
+  setStatus(`Ažurirano: ${row.field}`, "info");
 }
 
-// ---------- persistence (CustomXml) ----------
-const XML_NS = "http://biroa.local/ba-word-addin";
-const XML_ROOT = "BAWordAddinState";
+// ---------- XML state ----------
+const XML_NS = "http://biroa.rs/word-addin/state";
+
+function xmlEscape(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
 
 function buildStateXml() {
-  const esc = (s) =>
-    String(s ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&apos;");
-
-  const items = rows
-    .filter((r) => normalizeKey(r.field))
-    .map(
-      (r) =>
-        `<item field="${esc(r.field)}" value="${esc(r.value)}" type="${esc(
-          r.type
-        )}" format="${esc(r.format)}" />`
-    )
-    .join("");
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<${XML_ROOT} xmlns="${XML_NS}">
-  ${items}
-</${XML_ROOT}>`;
+  let xml = `<state xmlns="${XML_NS}">`;
+  for (const r of rows) {
+    const f = xmlEscape(r.field || "");
+    const v = xmlEscape(r.value || "");
+    const t = xmlEscape(r.type || "text");
+    const fmt = xmlEscape(r.format || "text:auto");
+    xml += `<item field="${f}" value="${v}" type="${t}" format="${fmt}"/>`;
+  }
+  xml += "</state>";
+  return xml;
 }
 
 async function saveStateToDocument() {
@@ -522,7 +598,7 @@ async function insertFieldAtSelection() {
 }
 
 async function fillFieldsFromTable() {
-  console.log("🔵 fillFieldsFromTable() POZVANA - NOVA VERZIJA (cc.insertText direktno)");
+  console.log("🔵 fillFieldsFromTable() POZVANA");
 
   const map = buildValueMap();
 
@@ -576,10 +652,13 @@ async function clearFieldsKeepControls() {
   await saveStateToDocument();
 }
 
+// ============================================
+// FIX: NOVA deleteControlsAndXml funkcija
+// ============================================
 async function deleteControlsAndXml() {
   const confirmed = confirm(
     "PAŽNJA: Ova akcija će trajno obrisati sva polja i plugin podatke iz dokumenta.\n\n" +
-      "Nakon brisanja, dokument neće više raditi sa ovim pluginom.\n\n" +
+      "Content controls će biti uklonjeni, ali tekst će ostati.\n\n" +
       "Da li želiš da nastaviš?"
   );
 
@@ -588,38 +667,85 @@ async function deleteControlsAndXml() {
     return;
   }
 
-  const map = buildValueMap();
-
-  await Word.run(async (context) => {
-    const ccs = context.document.contentControls;
-    ccs.load("items/tag");
-    await context.sync();
-
+  try {
+    console.log("🔴 Počinjem brisanje content controls...");
+    
+    const map = buildValueMap();
     let removed = 0;
-    for (const cc of ccs.items) {
-      const meta = parseTag(cc.tag || "");
-      if (!meta) continue;
 
-      const out = map.get(meta.key)?.formatted ?? "";
+    await Word.run(async (context) => {
+      const ccs = context.document.contentControls;
+      ccs.load("items");
+      await context.sync();
 
-      cc.insertText(out, Word.InsertLocation.replace);
-      try {
-        cc.delete(false);
-      } catch (e) {
-        // ignore
+      console.log(`  Pronađeno ${ccs.items.length} content controls`);
+
+      // Učitaj sve potrebne properties za svaki CC
+      for (const cc of ccs.items) {
+        cc.load("tag");
       }
-      removed++;
-    }
-    await context.sync();
-  });
+      await context.sync();
 
-  await deleteSavedStateFromDocument();
+      // Obradi svaki CC
+      for (const cc of ccs.items) {
+        const meta = parseTag(cc.tag || "");
+        if (!meta) continue;
 
-  rows = [];
-  selectedRowIndex = null;
-  renderRows();
+        console.log(`  - Brišem CC za polje: ${meta.key}`);
 
-  setStatus("Dokument očišćen: polja i plugin podaci su uklonjeni.", "info");
+        // Uzmi formatirani tekst ili prazan string
+        const finalText = map.get(meta.key)?.formatted ?? "";
+        
+        // Prvo umetni tekst
+        cc.insertText(finalText, Word.InsertLocation.replace);
+        
+        removed++;
+      }
+
+      // Sinhronizuj nakon umetanja teksta
+      await context.sync();
+
+      // Sada obriši sve content controls (drugi prolaz)
+      const ccsToDelete = context.document.contentControls;
+      ccsToDelete.load("items");
+      await context.sync();
+
+      for (const cc of ccsToDelete.items) {
+        cc.load("tag");
+      }
+      await context.sync();
+
+      for (const cc of ccsToDelete.items) {
+        const meta = parseTag(cc.tag || "");
+        if (!meta) continue;
+
+        try {
+          // keepContent = true znači da čuvamo tekst
+          cc.delete(true);
+        } catch (e) {
+          console.error("Greška pri brisanju CC:", e);
+        }
+      }
+
+      await context.sync();
+    });
+
+    console.log(`✅ Uklonjeno ${removed} content controls`);
+
+    // Obriši XML state iz dokumenta
+    await deleteSavedStateFromDocument();
+    console.log("✅ XML state obrisan");
+
+    // Očisti lokalne podatke
+    rows = [];
+    selectedRowIndex = null;
+    renderRows();
+
+    setStatus(`Dokument očišćen: ${removed} polja uklonjeno, plugin podaci obrisani.`, "info");
+  } catch (error) {
+    console.error("❌ GREŠKA pri brisanju:", error);
+    setStatus("Greška pri brisanju polja. Vidi konzolu.", "error");
+  }
 }
 
 // ---------- CSV ----------
