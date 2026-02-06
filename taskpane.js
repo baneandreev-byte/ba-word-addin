@@ -1,53 +1,54 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07-V19
+// VERZIJA: 2025-02-07 - V20
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 v3.1");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V20");
 console.log("✅ Funkcije: Ubaci, Popuni (editabilno), Očisti (čuva vrednosti), Obriši (potvrda)");
 
-let rows = [
-  { id: 1, field: "", value: "", type: "text", format: "text:auto" },
-  { id: 2, field: "", value: "", type: "text", format: "text:auto" },
-  { id: 3, field: "", value: "", type: "text", format: "text:auto" },
-  { id: 4, field: "", value: "", type: "text", format: "text:auto" },
-];
+let rows = [];
+let selectedRowIndex = null;
 
-let selectedRowId = rows[0]?.id ?? null;
+// Format options per type
+const FORMAT_OPTIONS = {
+  text: [
+    { value: "text:auto", label: "Automatski", hint: "" },
+    { value: "text:upper", label: "VELIKA SLOVA", hint: "Primer: BEOGRAD" },
+    { value: "text:lower", label: "mala slova", hint: "Primer: beograd" },
+    { value: "text:title", label: "Naslov", hint: "Primer: Beograd" },
+  ],
+  date: [
+    { value: "date:auto", label: "Kako je uneto", hint: "" },
+    { value: "date:today", label: "Danas (dd.mm.yyyy)", hint: "Primer: 07.02.2025" },
+    { value: "date:dd.mm.yyyy", label: "dd.mm.yyyy", hint: "Primer: 07.02.2025" },
+    { value: "date:yyyy-mm-dd", label: "yyyy-mm-dd", hint: "Primer: 2025-02-07" },
+  ],
+  number: [
+    { value: "number:auto", label: "Automatski", hint: "" },
+    { value: "number:int", label: "Ceo broj", hint: "Primer: 1234" },
+    { value: "number:2", label: "2 decimale", hint: "Primer: 1234.56" },
+    { value: "number:currency", label: "Valuta", hint: "Primer: 1234.56 RSD" },
+  ],
+};
 
 // ---------- DOM helpers ----------
 function el(id) {
   return document.getElementById(id);
 }
 
-function elMaybe(id) {
-  return document.getElementById(id) || null;
-}
-
 function setStatus(msg, kind = "info") {
-  const s = elMaybe("status");
+  const s = el("status");
   if (!s) return;
   s.textContent = msg;
   s.className = `status ${kind}`;
-  // auto hide after a bit
+  s.style.display = "block";
   clearTimeout(setStatus._t);
   setStatus._t = setTimeout(() => {
-    s.textContent = "";
-    s.className = "status";
+    s.style.display = "none";
   }, 3500);
 }
 
 // ---------- row helpers ----------
-function ensureDefaults(r) {
-  return {
-    id: r.id,
-    field: r.field ?? "",
-    value: r.value ?? "",
-    type: r.type ?? "text",
-    format: r.format ?? "text:auto",
-  };
-}
-
 function normalizeKey(s) {
   return String(s ?? "").trim();
 }
@@ -57,7 +58,6 @@ function token(key) {
 }
 
 // ---------- tag format in content control ----------
-// Tag format: BA_FIELD|key=<KEY>|type=<TYPE>|format=<FORMAT>
 function makeTag(key, type, format) {
   const k = normalizeKey(key);
   const t = (type || "text").trim();
@@ -85,20 +85,18 @@ function parseTag(tag) {
 // ---------- formatting ----------
 function applyFormat(type, format, rawValue) {
   const v = String(rawValue ?? "");
-
   if (!v) return "";
 
-  // minimal formatting rules
   if (type === "number") {
     const n = Number(String(v).replace(",", "."));
     if (Number.isNaN(n)) return v;
     if (format === "number:int") return String(Math.round(n));
     if (format === "number:2") return n.toFixed(2);
+    if (format === "number:currency") return n.toFixed(2) + " RSD";
     return String(n);
   }
 
   if (type === "date") {
-    // expect yyyy-mm-dd or dd.mm.yyyy; keep as-is if unknown
     if (format === "date:today") {
       const d = new Date();
       const dd = String(d.getDate()).padStart(2, "0");
@@ -109,14 +107,21 @@ function applyFormat(type, format, rawValue) {
     return v;
   }
 
-  // text
+  // text formatting
+  if (type === "text") {
+    if (format === "text:upper") return v.toUpperCase();
+    if (format === "text:lower") return v.toLowerCase();
+    if (format === "text:title") {
+      return v.replace(/\b\w/g, (l) => l.toUpperCase());
+    }
+  }
+
   return v;
 }
 
 function buildValueMap() {
   const map = new Map();
-  for (const r0 of rows) {
-    const r = ensureDefaults(r0);
+  for (const r of rows) {
     const key = normalizeKey(r.field);
     if (!key) continue;
     const raw = (r.value ?? "").trim();
@@ -126,85 +131,167 @@ function buildValueMap() {
   return map;
 }
 
-// ---------- render ----------
+// ---------- render rows ----------
 function renderRows() {
-  const tbodyLeft = elMaybe("tbody-left");
-  const tbodyRight = elMaybe("tbody-right");
-  if (!tbodyLeft || !tbodyRight) return;
+  const container = el("rows");
+  if (!container) return;
 
-  tbodyLeft.innerHTML = "";
-  tbodyRight.innerHTML = "";
+  container.innerHTML = "";
 
-  for (const r0 of rows) {
-    const r = ensureDefaults(r0);
+  if (rows.length === 0) {
+    container.innerHTML = '<div class="empty-state">Nema polja. Klikni "+ Dodaj red".</div>';
+    return;
+  }
 
-    // LEFT table: fields list
-    const trL = document.createElement("tr");
-    trL.dataset.id = String(r.id);
-    if (r.id === selectedRowId) trL.classList.add("selected");
+  rows.forEach((r, idx) => {
+    const row = document.createElement("div");
+    row.className = "table-row";
+    if (idx === selectedRowIndex) row.classList.add("selected");
 
-    const tdField = document.createElement("td");
-    tdField.textContent = r.field || "";
-    trL.appendChild(tdField);
+    // Field column
+    const fieldCell = document.createElement("div");
+    fieldCell.className = "table-cell";
+    const fieldInput = document.createElement("input");
+    fieldInput.type = "text";
+    fieldInput.className = "cell-input";
+    fieldInput.placeholder = "Naziv polja";
+    fieldInput.value = r.field || "";
+    fieldInput.addEventListener("input", (e) => {
+      r.field = e.target.value;
+      saveStateToDocument();
+    });
+    fieldCell.appendChild(fieldInput);
 
-    trL.addEventListener("click", () => {
-      selectedRowId = r.id;
-      renderRows();
-      syncEditorFromSelected();
+    // Value column
+    const valueCell = document.createElement("div");
+    valueCell.className = "table-cell";
+    const valueInput = document.createElement("input");
+    valueInput.type = "text";
+    valueInput.className = "cell-input";
+    valueInput.placeholder = "Vrednost";
+    valueInput.value = r.value || "";
+    valueInput.addEventListener("input", (e) => {
+      r.value = e.target.value;
+      saveStateToDocument();
+    });
+    valueCell.appendChild(valueInput);
+
+    // Actions column
+    const actionsCell = document.createElement("div");
+    actionsCell.className = "table-cell actions-cell";
+    
+    const btnEdit = document.createElement("button");
+    btnEdit.className = "btn-icon";
+    btnEdit.innerHTML = "⚙️";
+    btnEdit.title = "Podešavanja (tip, format)";
+    btnEdit.addEventListener("click", () => {
+      selectedRowIndex = idx;
+      openModal(r);
     });
 
-    tbodyLeft.appendChild(trL);
-
-    // RIGHT table: values
-    const trR = document.createElement("tr");
-    trR.dataset.id = String(r.id);
-    if (r.id === selectedRowId) trR.classList.add("selected");
-
-    const tdValue = document.createElement("td");
-    tdValue.textContent = r.value || "";
-    trR.appendChild(tdValue);
-
-    trR.addEventListener("click", () => {
-      selectedRowId = r.id;
-      renderRows();
-      syncEditorFromSelected();
+    const btnDelete = document.createElement("button");
+    btnDelete.className = "btn-icon";
+    btnDelete.innerHTML = "🗑️";
+    btnDelete.title = "Obriši red";
+    btnDelete.addEventListener("click", () => {
+      if (confirm(`Obrisati polje "${r.field}"?`)) {
+        rows.splice(idx, 1);
+        if (selectedRowIndex === idx) selectedRowIndex = null;
+        renderRows();
+        saveStateToDocument();
+      }
     });
 
-    tbodyRight.appendChild(trR);
+    actionsCell.appendChild(btnEdit);
+    actionsCell.appendChild(btnDelete);
+
+    row.appendChild(fieldCell);
+    row.appendChild(valueCell);
+    row.appendChild(actionsCell);
+
+    container.appendChild(row);
+  });
+}
+
+// ---------- modal ----------
+function openModal(row) {
+  const modal = el("modal");
+  const backdrop = el("modalBackdrop");
+  const fieldName = el("modalFieldName");
+  const formatSelect = el("formatSelect");
+  const formatHint = el("formatHint");
+
+  if (!modal || !backdrop) return;
+
+  // Show modal
+  modal.classList.remove("hidden");
+  backdrop.classList.remove("hidden");
+
+  // Set field name
+  fieldName.textContent = row.field || "Neimenovano polje";
+
+  // Set radio buttons
+  const radios = document.querySelectorAll('input[name="ftype"]');
+  radios.forEach((r) => {
+    r.checked = r.value === (row.type || "text");
+  });
+
+  // Populate format dropdown
+  updateFormatOptions(row.type || "text");
+  formatSelect.value = row.format || "text:auto";
+  updateFormatHint();
+
+  // Event listeners
+  radios.forEach((r) => {
+    r.addEventListener("change", () => {
+      updateFormatOptions(r.value);
+      updateFormatHint();
+    });
+  });
+
+  formatSelect.addEventListener("change", updateFormatHint);
+
+  function updateFormatOptions(type) {
+    formatSelect.innerHTML = "";
+    const options = FORMAT_OPTIONS[type] || FORMAT_OPTIONS.text;
+    options.forEach((opt) => {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.textContent = opt.label;
+      formatSelect.appendChild(option);
+    });
+    formatSelect.value = options[0].value;
+  }
+
+  function updateFormatHint() {
+    const type = document.querySelector('input[name="ftype"]:checked').value;
+    const format = formatSelect.value;
+    const options = FORMAT_OPTIONS[type] || FORMAT_OPTIONS.text;
+    const opt = options.find((o) => o.value === format);
+    formatHint.textContent = opt?.hint || "";
   }
 }
 
-function getSelectedRow() {
-  return rows.find((r) => r.id === selectedRowId) || rows[0] || null;
+function closeModal() {
+  const modal = el("modal");
+  const backdrop = el("modalBackdrop");
+  if (modal) modal.classList.add("hidden");
+  if (backdrop) backdrop.classList.add("hidden");
 }
 
-function syncEditorFromSelected() {
-  const r = getSelectedRow();
-  if (!r) return;
+function saveModalChanges() {
+  if (selectedRowIndex === null) return;
 
-  const field = elMaybe("inp-field");
-  const value = elMaybe("inp-value");
-  const type = elMaybe("sel-type");
-  const format = elMaybe("sel-format");
-  if (field) field.value = r.field || "";
-  if (value) value.value = r.value || "";
-  if (type) type.value = r.type || "text";
-  if (format) format.value = r.format || "text:auto";
-}
+  const row = rows[selectedRowIndex];
+  const type = document.querySelector('input[name="ftype"]:checked').value;
+  const format = el("formatSelect").value;
 
-function syncSelectedFromEditor() {
-  const r = getSelectedRow();
-  if (!r) return;
+  row.type = type;
+  row.format = format;
 
-  const field = elMaybe("inp-field");
-  const value = elMaybe("inp-value");
-  const type = elMaybe("sel-type");
-  const format = elMaybe("sel-format");
-
-  r.field = field ? field.value : r.field;
-  r.value = value ? value.value : r.value;
-  r.type = type ? type.value : r.type;
-  r.format = format ? format.value : r.format;
+  closeModal();
+  renderRows();
+  saveStateToDocument();
 }
 
 // ---------- persistence (CustomXml) ----------
@@ -221,7 +308,6 @@ function buildStateXml() {
       .replace(/'/g, "&apos;");
 
   const items = rows
-    .map(ensureDefaults)
     .filter((r) => normalizeKey(r.field))
     .map(
       (r) =>
@@ -245,7 +331,6 @@ async function saveStateToDocument() {
     parts.load("items");
     await context.sync();
 
-    // delete existing BA state
     for (const p of parts.items) {
       p.load("namespaceUri");
     }
@@ -279,7 +364,6 @@ async function loadStateFromDocument() {
     await context.sync();
 
     const str = xml.value || "";
-    // simple parse: extract <item ... />
     const items = [];
     const re = /<item\s+([^/>]+?)\s*\/>/g;
     let m;
@@ -305,16 +389,7 @@ async function loadStateFromDocument() {
     }
 
     if (items.length) {
-      rows = items.map((it, idx) => ({
-        id: idx + 1,
-        field: it.field,
-        value: it.value,
-        type: it.type,
-        format: it.format,
-      }));
-      if (!rows.length)
-        rows = [{ id: 1, field: "", value: "", type: "text", format: "text:auto" }];
-      selectedRowId = rows[0].id;
+      rows = items;
     }
   });
 }
@@ -339,10 +414,12 @@ async function deleteSavedStateFromDocument() {
 
 // ---------- Word operations ----------
 async function insertFieldAtSelection() {
-  syncSelectedFromEditor();
-  const r = getSelectedRow();
-  if (!r) return;
+  if (selectedRowIndex === null) {
+    setStatus("Izaberi red u tabeli prvo.", "warn");
+    return;
+  }
 
+  const r = rows[selectedRowIndex];
   const key = normalizeKey(r.field);
   if (!key) {
     setStatus("Unesi naziv polja.", "warn");
@@ -354,17 +431,15 @@ async function insertFieldAtSelection() {
     const cc = sel.insertContentControl();
     cc.tag = makeTag(key, r.type, r.format);
     cc.title = key;
-    // BoundingBox je čitljiviji od Tags u većini Word verzija
     cc.appearance = "BoundingBox";
-    
-    // Zaštita (best-effort): ne sme da sruši ubacivanje ako property nije podržan
+
     try {
       cc.cannotDelete = true;
       cc.cannotEdit = false;
     } catch (e) {
-      // ignore (nije podržano u ovoj verziji Word-a)
+      // ignore
     }
-    
+
     cc.insertText(token(key), Word.InsertLocation.replace);
     await context.sync();
     setStatus(`Dodato polje: ${key}`, "info");
@@ -373,64 +448,10 @@ async function insertFieldAtSelection() {
   await saveStateToDocument();
 }
 
-async function scanFieldsFromDocument() {
-  await Word.run(async (context) => {
-    const ccs = context.document.contentControls;
-    ccs.load("items/tag,title");
-    await context.sync();
-
-    // Kreiraj mapu postojećih rows (da ne izgubimo vrednosti koje je korisnik već uneo)
-    const existing = new Map(
-      rows
-        .map(ensureDefaults)
-        .filter((r) => normalizeKey(r.field))
-        .map((r) => [normalizeKey(r.field), r])
-    );
-
-    const found = [];
-    for (const cc of ccs.items) {
-      const meta = parseTag(cc.tag || "");
-      if (!meta) continue;
-      
-      // Ako već postoji u tabeli, zadrži vrednost i ostale parametre
-      const existingRow = existing.get(meta.key);
-      
-      found.push({
-        field: meta.key,
-        value: existingRow?.value ?? "",
-        type: meta.type || existingRow?.type || "text",
-        format: meta.format || existingRow?.format || "text:auto",
-      });
-    }
-
-    const uniq = new Map();
-    for (const f of found) {
-      const k = normalizeKey(f.field);
-      if (!k) continue;
-      if (!uniq.has(k))
-        uniq.set(k, { field: k, value: f.value, type: f.type, format: f.format });
-    }
-
-    const arr = Array.from(uniq.values());
-    rows = arr.length
-      ? arr.map((it, idx) => ({ id: idx + 1, ...it }))
-      : [{ id: 1, field: "", value: "", type: "text", format: "text:auto" }];
-
-    selectedRowId = rows[0].id;
-  });
-
-  renderRows();
-  syncEditorFromSelected();
-  await saveStateToDocument();
-  setStatus("Skenirano (postojeće vrednosti sačuvane).", "info");
-}
-
 async function fillFieldsFromTable() {
   console.log("🔵 fillFieldsFromTable() POZVANA - NOVA VERZIJA (cc.insertText direktno)");
-  
-  // map: key -> { raw, formatted }
+
   const map = buildValueMap();
-  renderRows();
 
   await Word.run(async (context) => {
     const ccs = context.document.contentControls;
@@ -443,10 +464,8 @@ async function fillFieldsFromTable() {
       const meta = parseTag(cc.tag || "");
       if (!meta) continue;
 
-      // Ako nema vrednosti u tabeli: ostavi {KEY} da se vidi šta je
       const out = map.get(meta.key)?.formatted ?? token(meta.key);
 
-      // KLJUČNO: menjamo sadržaj KONTROLE, ne range.clear()
       console.log(`  - Popunjavam polje "${meta.key}" sa: "${out}"`);
       cc.insertText(out, Word.InsertLocation.replace);
 
@@ -462,9 +481,6 @@ async function fillFieldsFromTable() {
 }
 
 async function clearFieldsKeepControls() {
-  // Ne diramo rows[] (vrednosti u UI ostaju sačuvane za kasnije popunjavanje)
-  renderRows();
-
   await Word.run(async (context) => {
     const ccs = context.document.contentControls;
     ccs.load("items/tag");
@@ -476,7 +492,6 @@ async function clearFieldsKeepControls() {
       const meta = parseTag(cc.tag || "");
       if (!meta) continue;
 
-      // Vrati placeholder u kontrolu
       cc.insertText(token(meta.key), Word.InsertLocation.replace);
       cleared++;
     }
@@ -489,23 +504,18 @@ async function clearFieldsKeepControls() {
 }
 
 async function deleteControlsAndXml() {
-  // POPRAVKA: Dodaj potvrdu da ne bi slučajno obrisao sve
-  // NAPOMENA: confirm() nekad ne radi dobro u Office web verzijama
-  // Ako bude problema, prebaciti na Office Dialog API ili custom modal
   const confirmed = confirm(
     "PAŽNJA: Ova akcija će trajno obrisati sva polja i plugin podatke iz dokumenta.\n\n" +
-    "Nakon brisanja, dokument neće više raditi sa ovim pluginom.\n\n" +
-    "Da li želiš da nastaviš?"
+      "Nakon brisanja, dokument neće više raditi sa ovim pluginom.\n\n" +
+      "Da li želiš da nastaviš?"
   );
-  
+
   if (!confirmed) {
     setStatus("Brisanje otkazano.", "info");
     return;
   }
-  
-  // cilj: ukloniti SVE tragove plugina (kontrole + XML), i ostaviti samo običan tekst
+
   const map = buildValueMap();
-  renderRows();
 
   await Word.run(async (context) => {
     const ccs = context.document.contentControls;
@@ -517,27 +527,23 @@ async function deleteControlsAndXml() {
       const meta = parseTag(cc.tag || "");
       if (!meta) continue;
 
-      // bez token fallback-a: ako nema vrednosti -> prazno
       const out = map.get(meta.key)?.formatted ?? "";
 
-      // upiši tekst u kontrolu, pa obriši kontrolu
       cc.insertText(out, Word.InsertLocation.replace);
       try {
         cc.delete(false);
       } catch (e) {
-        // ako ne može da se obriše control (lock/header/footer), bar smo zamenili tekst
+        // ignore
       }
       removed++;
     }
     await context.sync();
   });
 
-  // ukloni persistence (CustomXml)
   await deleteSavedStateFromDocument();
 
-  // očisti UI (opciono, ali praktično)
-  rows = [{ id: 1, field: "", value: "", type: "text", format: "text:auto" }];
-  selectedRowId = rows[0]?.id ?? null;
+  rows = [];
+  selectedRowIndex = null;
   renderRows();
 
   setStatus("Dokument očišćen: polja i plugin podaci su uklonjeni.", "info");
@@ -571,7 +577,7 @@ function exportCSV() {
   a.click();
   URL.revokeObjectURL(url);
 
-  setStatus(`Eksportovano ${lines.length} polja u CSV (delimiter ';').`, "info");
+  setStatus(`Eksportovano ${lines.length} polja u CSV.`, "info");
 }
 
 function parseCsvLine(line, delimiter = ";") {
@@ -623,10 +629,8 @@ async function importCSV() {
       .filter(Boolean);
 
     const newRows = [];
-    let id = 1;
 
     for (const line of lines) {
-      // novi standard ';', fallback za stare fajlove ','
       let parts = parseCsvLine(line, ";");
       let usedDelim = ";";
       if (parts.length < 2) {
@@ -637,13 +641,13 @@ async function importCSV() {
       const field = (parts[0] || "").trim();
       const value = (parts.slice(1).join(usedDelim) || "").trim();
       if (field) {
-        newRows.push({ id: id++, field, value, type: "text", format: "text:auto" });
+        newRows.push({ field, value, type: "text", format: "text:auto" });
       }
     }
 
     if (newRows.length) {
       rows = newRows;
-      selectedRowId = rows[0]?.id ?? null;
+      selectedRowIndex = null;
       renderRows();
       await saveStateToDocument();
       setStatus(`Importovano ${newRows.length} polja iz CSV.`, "info");
@@ -655,47 +659,47 @@ async function importCSV() {
 
 // ---------- wiring ----------
 function bindUi() {
-  const btnAdd = elMaybe("btn-add");
-  const btnScan = elMaybe("btn-scan");
-  const btnFill = elMaybe("btn-fill");
-  const btnClear = elMaybe("btn-clear");
-  const btnDelete = elMaybe("btn-delete");
-  const btnExport = elMaybe("btn-export");
-  const btnImport = elMaybe("btn-import");
+  const btnInsert = el("btnInsert");
+  const btnFill = el("btnFill");
+  const btnClear = el("btnClear");
+  const btnDelete = el("btnDelete");
+  const btnAddRow = el("btnAddRow");
+  const btnExportCSV = el("btnExportCSV");
+  const btnImportCSV = el("btnImportCSV");
 
-  if (btnAdd) btnAdd.addEventListener("click", insertFieldAtSelection);
-  if (btnScan) btnScan.addEventListener("click", scanFieldsFromDocument);
+  const btnModalClose = el("btnModalClose");
+  const btnModalCancel = el("btnModalCancel");
+  const btnModalOk = el("btnModalOk");
+  const modalBackdrop = el("modalBackdrop");
+
+  if (btnInsert) btnInsert.addEventListener("click", insertFieldAtSelection);
   if (btnFill) btnFill.addEventListener("click", fillFieldsFromTable);
   if (btnClear) btnClear.addEventListener("click", clearFieldsKeepControls);
   if (btnDelete) btnDelete.addEventListener("click", deleteControlsAndXml);
-  if (btnExport) btnExport.addEventListener("click", exportCSV);
-  if (btnImport) btnImport.addEventListener("click", importCSV);
+  if (btnExportCSV) btnExportCSV.addEventListener("click", exportCSV);
+  if (btnImportCSV) btnImportCSV.addEventListener("click", importCSV);
 
-  const field = elMaybe("inp-field");
-  const value = elMaybe("inp-value");
-  const type = elMaybe("sel-type");
-  const format = elMaybe("sel-format");
+  if (btnAddRow) {
+    btnAddRow.addEventListener("click", () => {
+      rows.push({ field: "", value: "", type: "text", format: "text:auto" });
+      renderRows();
+      saveStateToDocument();
+    });
+  }
 
-  const onChange = async () => {
-    syncSelectedFromEditor();
-    renderRows();
-    await saveStateToDocument();
-  };
-
-  if (field) field.addEventListener("input", onChange);
-  if (value) value.addEventListener("input", onChange);
-  if (type) type.addEventListener("change", onChange);
-  if (format) format.addEventListener("change", onChange);
+  if (btnModalClose) btnModalClose.addEventListener("click", closeModal);
+  if (btnModalCancel) btnModalCancel.addEventListener("click", closeModal);
+  if (btnModalOk) btnModalOk.addEventListener("click", saveModalChanges);
+  if (modalBackdrop) modalBackdrop.addEventListener("click", closeModal);
 }
 
 Office.onReady(async () => {
   try {
     await loadStateFromDocument();
   } catch (e) {
-    // ignore
+    console.error("Load state error:", e);
   }
 
   renderRows();
-  syncEditorFromSelected();
   bindUi();
 });
