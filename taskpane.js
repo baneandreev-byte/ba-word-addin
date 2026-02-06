@@ -1,11 +1,11 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V27 (FIX ROW SELECTION)
+// VERZIJA: 2025-02-07 - V28 (FIX DELETE - FINAL)
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V27");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V28");
+console.log("✅ FIX DELETE (FINAL): Tekst se umeće VAN CC, pa se CC briše");
 console.log("✅ FIX: Klik na red sada selektuje polje za ubacivanje");
-console.log("✅ FIX: Dugme OBRIŠI sada korektno briše content controls i ostavlja tekst");
 
 let rows = [];
 let selectedRowIndex = null;
@@ -653,7 +653,7 @@ async function clearFieldsKeepControls() {
 }
 
 // ============================================
-// FIX: NOVA deleteControlsAndXml funkcija
+// FIX: deleteControlsAndXml - Konačno rešenje
 // ============================================
 async function deleteControlsAndXml() {
   const confirmed = confirm(
@@ -680,50 +680,41 @@ async function deleteControlsAndXml() {
 
       console.log(`  Pronađeno ${ccs.items.length} content controls`);
 
-      // Učitaj sve potrebne properties za svaki CC
+      // Učitaj sve potrebne properties
       for (const cc of ccs.items) {
-        cc.load("tag");
+        cc.load("tag,text");
       }
       await context.sync();
 
-      // Obradi svaki CC
+      // Prvo prolaz: zameni svaki CC sa plain text-om
+      const toDelete = [];
       for (const cc of ccs.items) {
         const meta = parseTag(cc.tag || "");
         if (!meta) continue;
 
-        console.log(`  - Brišem CC za polje: ${meta.key}`);
+        console.log(`  - Obrađujem CC za polje: ${meta.key}`);
 
-        // Uzmi formatirani tekst ili prazan string
-        const finalText = map.get(meta.key)?.formatted ?? "";
+        // Uzmi formatirani tekst ili trenutni tekst u CC-u
+        const finalText = map.get(meta.key)?.formatted ?? cc.text;
         
-        // Prvo umetni tekst
-        cc.insertText(finalText, Word.InsertLocation.replace);
+        // Umetni plain text NAKON content control-a
+        const range = cc.getRange(Word.RangeLocation.after);
+        range.insertText(finalText, Word.InsertLocation.start);
         
+        // Označi CC za brisanje
+        toDelete.push(cc);
         removed++;
       }
 
-      // Sinhronizuj nakon umetanja teksta
       await context.sync();
+      console.log(`  Umetnut tekst za ${removed} polja`);
 
-      // Sada obriši sve content controls (drugi prolaz)
-      const ccsToDelete = context.document.contentControls;
-      ccsToDelete.load("items");
-      await context.sync();
-
-      for (const cc of ccsToDelete.items) {
-        cc.load("tag");
-      }
-      await context.sync();
-
-      for (const cc of ccsToDelete.items) {
-        const meta = parseTag(cc.tag || "");
-        if (!meta) continue;
-
+      // Drugi prolaz: obriši sve CC-ove BEZ sadržaja (text je već van CC-a)
+      for (const cc of toDelete) {
         try {
-          // keepContent = true znači da čuvamo tekst
-          cc.delete(true);
+          cc.delete(false); // false jer smo vec izvukli text
         } catch (e) {
-          console.error("Greška pri brisanju CC:", e);
+          console.error("  Greška pri brisanju:", e);
         }
       }
 
@@ -732,7 +723,7 @@ async function deleteControlsAndXml() {
 
     console.log(`✅ Uklonjeno ${removed} content controls`);
 
-    // Obriši XML state iz dokumenta
+    // Obriši XML state
     await deleteSavedStateFromDocument();
     console.log("✅ XML state obrisan");
 
