@@ -348,7 +348,17 @@ async function insertFieldAtSelection() {
     const cc = sel.insertContentControl();
     cc.tag = makeTag(key, r.type, r.format);
     cc.title = key;
-    cc.appearance = "Tags";
+    // BoundingBox je čitljiviji od Tags u većini Word verzija
+    cc.appearance = "BoundingBox";
+    
+    // Zaštita (best-effort): ne sme da sruši ubacivanje ako property nije podržan
+    try {
+      cc.cannotDelete = true;
+      cc.cannotEdit = false;
+    } catch (e) {
+      // ignore (nije podržano u ovoj verziji Word-a)
+    }
+    
     cc.insertText(token(key), Word.InsertLocation.replace);
     await context.sync();
     setStatus(`Dodato polje: ${key}`, "info");
@@ -363,15 +373,27 @@ async function scanFieldsFromDocument() {
     ccs.load("items/tag,title");
     await context.sync();
 
+    // Kreiraj mapu postojećih rows (da ne izgubimo vrednosti koje je korisnik već uneo)
+    const existing = new Map(
+      rows
+        .map(ensureDefaults)
+        .filter((r) => normalizeKey(r.field))
+        .map((r) => [normalizeKey(r.field), r])
+    );
+
     const found = [];
     for (const cc of ccs.items) {
       const meta = parseTag(cc.tag || "");
       if (!meta) continue;
+      
+      // Ako već postoji u tabeli, zadrži vrednost i ostale parametre
+      const existingRow = existing.get(meta.key);
+      
       found.push({
         field: meta.key,
-        value: "",
-        type: meta.type || "text",
-        format: meta.format || "text:auto",
+        value: existingRow?.value ?? "",
+        type: meta.type || existingRow?.type || "text",
+        format: meta.format || existingRow?.format || "text:auto",
       });
     }
 
@@ -380,7 +402,7 @@ async function scanFieldsFromDocument() {
       const k = normalizeKey(f.field);
       if (!k) continue;
       if (!uniq.has(k))
-        uniq.set(k, { field: k, value: "", type: f.type, format: f.format });
+        uniq.set(k, { field: k, value: f.value, type: f.type, format: f.format });
     }
 
     const arr = Array.from(uniq.values());
@@ -394,10 +416,11 @@ async function scanFieldsFromDocument() {
   renderRows();
   syncEditorFromSelected();
   await saveStateToDocument();
-  setStatus("Skenirano.", "info");
+  setStatus("Skenirano (postojeće vrednosti sačuvane).", "info");
 }
 
 async function fillFieldsFromTable() {
+  // map: key -> { raw, formatted }
   const map = buildValueMap();
   renderRows();
 
@@ -407,16 +430,20 @@ async function fillFieldsFromTable() {
     await context.sync();
 
     let filled = 0;
+
     for (const cc of ccs.items) {
       const meta = parseTag(cc.tag || "");
       if (!meta) continue;
+
+      // Ako nema vrednosti u tabeli: ostavi {KEY} da se vidi šta je
       const out = map.get(meta.key)?.formatted ?? token(meta.key);
 
-      // VAŽNO: upis u sadržaj kontrole (ne preko getRange()), da polje ostane
+      // KLJUČNO: menjamo sadržaj KONTROLE, ne range.clear()
       cc.insertText(out, Word.InsertLocation.replace);
 
       filled++;
     }
+
     await context.sync();
     setStatus(`Popunjeno ${filled} polja.`, "info");
   });
@@ -425,35 +452,47 @@ async function fillFieldsFromTable() {
 }
 
 async function clearFieldsKeepControls() {
-  // UI: obriši vrednosti u desnoj tabeli
-  rows = rows.map((r) => ({ ...r, value: "" }));
+  // Ne diramo rows[] (vrednosti u UI ostaju sačuvane za kasnije popunjavanje)
   renderRows();
 
-  // Word: vrati sva BA polja na {KEY}, ali ostavi kontrole
   await Word.run(async (context) => {
     const ccs = context.document.contentControls;
     ccs.load("items/tag");
     await context.sync();
 
     let cleared = 0;
+
     for (const cc of ccs.items) {
       const meta = parseTag(cc.tag || "");
       if (!meta) continue;
 
-      // VAŽNO: upis u sadržaj kontrole, da kontrola ostane
+      // Vrati placeholder u kontrolu
       cc.insertText(token(meta.key), Word.InsertLocation.replace);
-
       cleared++;
     }
+
     await context.sync();
-    setStatus(`Očišćeno ${cleared} polja i obrisane vrednosti.`, "info");
+    setStatus(`Očišćeno ${cleared} polja (placeholder {KEY} vraćen).`, "info");
   });
 
-  // Persist: sačuvaj prazne vrednosti
   await saveStateToDocument();
 }
 
-async function deleteControlsLeaveTextAndXml() {
+async function deleteControlsAndXml() {
+  // POPRAVKA: Dodaj potvrdu da ne bi slučajno obrisao sve
+  // NAPOMENA: confirm() nekad ne radi dobro u Office web verzijama
+  // Ako bude problema, prebaciti na Office Dialog API ili custom modal
+  const confirmed = confirm(
+    "PAŽNJA: Ova akcija će trajno obrisati sva polja i plugin podatke iz dokumenta.\n\n" +
+    "Nakon brisanja, dokument neće više raditi sa ovim pluginom.\n\n" +
+    "Da li želiš da nastaviš?"
+  );
+  
+  if (!confirmed) {
+    setStatus("Brisanje otkazano.", "info");
+    return;
+  }
+  
   // cilj: ukloniti SVE tragove plugina (kontrole + XML), i ostaviti samo običan tekst
   const map = buildValueMap();
   renderRows();
@@ -473,11 +512,14 @@ async function deleteControlsLeaveTextAndXml() {
 
       // upiši tekst u kontrolu, pa obriši kontrolu
       cc.insertText(out, Word.InsertLocation.replace);
-      cc.delete(false);
+      try {
+        cc.delete(false);
+      } catch (e) {
+        // ako ne može da se obriše control (lock/header/footer), bar smo zamenili tekst
+      }
       removed++;
     }
     await context.sync();
-    setStatus(`Obrisane kontrole: ${removed}.`, "info");
   });
 
   // ukloni persistence (CustomXml)
@@ -488,7 +530,7 @@ async function deleteControlsLeaveTextAndXml() {
   selectedRowId = rows[0]?.id ?? null;
   renderRows();
 
-  setStatus("Dokument je očišćen od plugina (bez kontrola i XML).", "info");
+  setStatus("Dokument očišćen: polja i plugin podaci su uklonjeni.", "info");
 }
 
 // ---------- CSV ----------
@@ -615,7 +657,7 @@ function bindUi() {
   if (btnScan) btnScan.addEventListener("click", scanFieldsFromDocument);
   if (btnFill) btnFill.addEventListener("click", fillFieldsFromTable);
   if (btnClear) btnClear.addEventListener("click", clearFieldsKeepControls);
-  if (btnDelete) btnDelete.addEventListener("click", deleteControlsLeaveTextAndXml);
+  if (btnDelete) btnDelete.addEventListener("click", deleteControlsAndXml);
   if (btnExport) btnExport.addEventListener("click", exportCSV);
   if (btnImport) btnImport.addEventListener("click", importCSV);
 
