@@ -1,9 +1,9 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V22
+// VERZIJA: 2025-02-07 - V23
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V22");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V23");
 console.log("✅ Funkcije: Ubaci, Popuni (editabilno), Očisti (čuva vrednosti), Obriši (potvrda)");
 
 let rows = [];
@@ -22,12 +22,16 @@ const FORMAT_OPTIONS = {
     { value: "date:today", label: "Danas (dd.mm.yyyy)", hint: "Primer: 07.02.2025" },
     { value: "date:dd.mm.yyyy", label: "dd.mm.yyyy", hint: "Primer: 07.02.2025" },
     { value: "date:yyyy-mm-dd", label: "yyyy-mm-dd", hint: "Primer: 2025-02-07" },
+    { value: "date:mmmm.yyyy", label: "MMMM.yyyy", hint: "Primer: februar.2025" },
+    { value: "date:dd.mmmm.yyyy", label: "dd.MMMM.yyyy", hint: "Primer: 07.februar.2025" },
   ],
   number: [
     { value: "number:auto", label: "Automatski", hint: "" },
-    { value: "number:int", label: "Ceo broj", hint: "Primer: 1234" },
-    { value: "number:2", label: "2 decimale", hint: "Primer: 1234.56" },
-    { value: "number:currency", label: "Valuta", hint: "Primer: 1234.56 RSD" },
+    { value: "number:int", label: "Ceo broj", hint: "Primer: 1.234" },
+    { value: "number:2", label: "2 decimale", hint: "Primer: 1.234,56" },
+    { value: "number:rsd", label: "RSD", hint: "Primer: 1.234,56 RSD" },
+    { value: "number:eur", label: "€", hint: "Primer: 1.234,56 €" },
+    { value: "number:usd", label: "$", hint: "Primer: 1.234,56 $" },
   ],
 };
 
@@ -88,15 +92,40 @@ function applyFormat(type, format, rawValue) {
   if (!v) return "";
 
   if (type === "number") {
-    const n = Number(String(v).replace(",", "."));
+    // Očisti input - dozvoli tačke, zareze i cifre
+    const cleanValue = String(v).replace(/[^\d.,-]/g, "");
+    // Pretvori u broj - zameni zareze sa tačkama
+    const n = Number(cleanValue.replace(/\./g, "").replace(",", "."));
     if (Number.isNaN(n)) return v;
-    if (format === "number:int") return String(Math.round(n));
-    if (format === "number:2") return n.toFixed(2);
-    if (format === "number:currency") return n.toFixed(2) + " RSD";
+    
+    // Formatiranje broja: 1.234,56 format (tačka za hiljade, zarez za decimale)
+    const formatNumber = (num, decimals = 0) => {
+      const fixed = num.toFixed(decimals);
+      const parts = fixed.split(".");
+      // Dodaj tačku kao separator hiljada
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+      // Zameni decimalnu tačku sa zarezom
+      return decimals > 0 ? parts[0] + "," + parts[1] : parts[0];
+    };
+    
+    if (format === "number:int") return formatNumber(Math.round(n), 0);
+    if (format === "number:2") return formatNumber(n, 2);
+    if (format === "number:rsd") return formatNumber(n, 2) + " RSD";
+    if (format === "number:eur") return formatNumber(n, 2) + " €";
+    if (format === "number:usd") return formatNumber(n, 2) + " $";
+    // Fallback za stari format
+    if (format === "number:currency") return formatNumber(n, 2) + " RSD";
+    
     return String(n);
   }
 
   if (type === "date") {
+    // Meseci na srpskom (lowercase)
+    const months = [
+      "januar", "februar", "mart", "april", "maj", "jun",
+      "jul", "avgust", "septembar", "oktobar", "novembar", "decembar"
+    ];
+    
     if (format === "date:today") {
       const d = new Date();
       const dd = String(d.getDate()).padStart(2, "0");
@@ -104,6 +133,36 @@ function applyFormat(type, format, rawValue) {
       const yyyy = d.getFullYear();
       return `${dd}.${mm}.${yyyy}`;
     }
+    
+    if (format === "date:mmmm.yyyy" || format === "date:dd.mmmm.yyyy") {
+      // Parsiranje datuma (očekujemo dd.mm.yyyy ili yyyy-mm-dd)
+      let d;
+      if (v.includes(".")) {
+        // dd.mm.yyyy format
+        const parts = v.split(".");
+        if (parts.length === 3) {
+          d = new Date(parts[2], parts[1] - 1, parts[0]);
+        }
+      } else if (v.includes("-")) {
+        // yyyy-mm-dd format
+        d = new Date(v);
+      } else {
+        return v; // ne možemo parsirati
+      }
+      
+      if (!d || isNaN(d.getTime())) return v;
+      
+      const monthName = months[d.getMonth()];
+      const yyyy = d.getFullYear();
+      
+      if (format === "date:mmmm.yyyy") {
+        return `${monthName}.${yyyy}`;
+      } else {
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${dd}.${monthName}.${yyyy}`;
+      }
+    }
+    
     return v;
   }
 

@@ -6,12 +6,12 @@
   xsi:type="TaskPaneApp">
 
   <!-- ============================================ -->
-  <!-- VERZIJA: 1.0.0.22 (V22) -->
+  <!-- VERZIJA: 1.0.0.24 (V24) -->
   <!-- Datum: 2025-02-07 -->
   <!-- ============================================ -->
 
   <Id>10118cd9-088f-498a-aae7-05c50d6d258a</Id>
-  <Version>1.0.0.23</Version>
+  <Version>1.0.0.24</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
