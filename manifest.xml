@@ -6,7 +6,7 @@
   xsi:type="TaskPaneApp">
 
   <Id>10118cd9-088f-498a-aae7-05c50d6d258a</Id>
-  <Version>1.0.0.19</Version>
+  <Version>1.0.0.20</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
