@@ -1020,7 +1020,30 @@ async function getGraphToken() {
     return token;
   } catch (error) {
     console.error("❌ Greška pri dobijanju tokena:", error);
-    throw new Error("Ne mogu da dobijem pristup SharePoint-u. Proveri da li si ulogovan.");
+    console.error("❌ Error code:", error.code);
+    console.error("❌ Error message:", error.message);
+    console.error("❌ Error name:", error.name);
+    
+    // Detaljne poruke za različite greške
+    if (error.code === 13001) {
+      throw new Error("CONSENT REQUIRED: Korisnik mora da odobri pristup. Klikni 'Allow' kada se pojavi popup.");
+    } else if (error.code === 13002) {
+      throw new Error("USER NOT SIGNED IN: Korisnik nije ulogovan u Office. Uloguj se u Word.");
+    } else if (error.code === 13003) {
+      throw new Error("INTERNAL ERROR: Office SSO greška. Restartuj Word i probaj ponovo.");
+    } else if (error.code === 13004) {
+      throw new Error("INVALID RESOURCE: Resource URL u manifestu je pogrešan.");
+    } else if (error.code === 13005) {
+      throw new Error("INVALID GRANT: Token je istekao ili je nevažeći.");
+    } else if (error.code === 13006) {
+      throw new Error("CLIENT ERROR: Greška u konfiguraciji Azure AD aplikacije.");
+    } else if (error.code === 13007) {
+      throw new Error("MISSING CONSENT: Admin consent nije dat za aplikaciju.");
+    } else if (error.code === 13012) {
+      throw new Error("POPUP BLOCKED: Consent popup je blokiran. Dozvoli popups.");
+    } else {
+      throw new Error(`SSO greška (${error.code || 'unknown'}): ${error.message || 'Proveri Azure AD konfiguraciju'}`);
+    }
   }
 }
 
