@@ -6,12 +6,12 @@
   xsi:type="TaskPaneApp">
 
   <!-- ============================================ -->
-  <!-- VERZIJA: 1.0.0.29.1 (V30) - DRAG AND DROP -->
+  <!-- VERZIJA: 1.0.0.31 - DRAG AND DROP -->
   <!-- Datum: 2025-02-07 -->
   <!-- ============================================ -->
 
   <Id>10118cd9-088f-498a-aae7-05c50d6d258a</Id>
-  <Version>1.0.0.30</Version>
+  <Version>1.0.0.31</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 

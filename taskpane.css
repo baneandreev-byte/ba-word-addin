@@ -85,8 +85,8 @@ body {
 /* ========== Table ========== */
 .table-header {
   display: grid;
-  grid-template-columns: 4px 1fr 1fr 80px;
-  gap: 8px;
+  grid-template-columns: 14px 1fr 1fr 80px;
+  gap: 4px;
   padding: 10px 14px;
   background: #f3f4f6;
   border-radius: 8px 8px 0 0;
@@ -114,7 +114,7 @@ body {
 .row {
   display: grid;
   grid-template-columns: 4px 1fr 1fr 80px;
-  gap: 8px;
+  gap: 4px;
   padding: 10px 14px;
   border-top: 1px solid #e5e7eb;
   transition: background 0.15s;
@@ -495,7 +495,7 @@ body {
 
 /* Drag handle */
 .drag-handle {
-  width: 24px;
+  width: 14px;
   height: 36px;
   display: flex;
   align-items: center;
