@@ -85,7 +85,7 @@ body {
 /* ========== Table ========== */
 .table-header {
   display: grid;
-  grid-template-columns: 14px 1fr 1fr 80px;
+  grid-template-columns: 14px minmax(150px, 1fr) minmax(150px, 1fr) 80px;
   gap: 4px;
   padding: 10px 14px;
   background: #f3f4f6;
@@ -113,7 +113,7 @@ body {
 
 .row {
   display: grid;
-  grid-template-columns: 4px 1fr 1fr 80px;
+  grid-template-columns: 14px minmax(150px, 1fr) minmax(150px, 1fr) 80px;
   gap: 4px;
   padding: 10px 14px;
   border-top: 1px solid #e5e7eb;
@@ -193,13 +193,13 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   margin-bottom: 16px;
 }
 
 .csv-group {
   display: flex;
-  gap: 8px;
+  gap: 4px;
 }
 
 .btn-primary,
@@ -332,7 +332,7 @@ body {
 
 .modal-footer {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   padding: 20px 24px;
   border-top: 1px solid #e5e7eb;
   justify-content: flex-end;
@@ -378,7 +378,7 @@ body {
 .radio-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   cursor: pointer;
   padding: 10px 14px;
   border: 2px solid #d1d5db;
@@ -502,7 +502,7 @@ body {
   justify-content: center;
   cursor: grab;
   color: #9ca3af;
-  font-size: 18px;
+  font-size: 14px;
   user-select: none;
   transition: all 0.2s;
   font-weight: bold;
