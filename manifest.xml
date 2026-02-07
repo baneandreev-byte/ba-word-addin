@@ -6,12 +6,12 @@
   xsi:type="TaskPaneApp">
 
   <!-- ============================================ -->
-  <!-- VERZIJA: 1.0.0.39 (V30) - SHAREPOINT TEMPLATES -->
+  <!-- VERZIJA: 1.0.0.40 (V40) - SHAREPOINT TEMPLATES -->
   <!-- Datum: 2025-02-07 -->
   <!-- ============================================ -->
 
   <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
-  <Version>1.0.0.39</Version>
+  <Version>1.0.0.40</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
