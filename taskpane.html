@@ -20,6 +20,7 @@
       <button id="btnFill" class="tab-btn">POPUNI</button>
       <button id="btnClear" class="tab-btn">OČISTI</button>
       <button id="btnDelete" class="tab-btn danger">OBRIŠI</button>
+      <button id="btnTemplates" class="tab-btn">TEMPLEJTI</button>
     </div>
 
     <!-- Content -->
@@ -107,7 +108,68 @@
     </div>
   </div>
 
+  <!-- ========== MODAL (Templates) ========== -->
+  <div id="modalTemplatesBackdrop" class="modal-backdrop hidden"></div>
+  
+  <div id="modalTemplates" class="modal-dialog modal-templates hidden">
+    <div class="modal-header">
+      <h3>Templejti</h3>
+      <button id="btnModalTemplatesClose" class="modal-close">×</button>
+    </div>
+
+    <div class="modal-body">
+      
+      <!-- Lista templata -->
+      <div id="templatesList" class="templates-list">
+        <div class="empty-state">Nema sačuvanih templata</div>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button id="btnNewTemplate" class="btn-primary">+ Novi templejt</button>
+    </div>
+  </div>
+
+  <!-- ========== MODAL (Edit Template) ========== -->
+  <div id="modalEditTemplateBackdrop" class="modal-backdrop hidden"></div>
+  
+  <div id="modalEditTemplate" class="modal-dialog modal-edit-template hidden">
+    <div class="modal-header">
+      <h3 id="editTemplateTitle">Novi templejt</h3>
+      <button id="btnModalEditTemplateClose" class="modal-close">×</button>
+    </div>
+
+    <div class="modal-body">
+      
+      <!-- Ime templata -->
+      <div class="form-group">
+        <label class="form-label" for="templateName">Ime templata:</label>
+        <input type="text" id="templateName" class="form-input" placeholder="npr. Ugovor o delu" />
+      </div>
+
+      <!-- Opis -->
+      <div class="form-group">
+        <label class="form-label" for="templateDesc">Opis (opciono):</label>
+        <textarea id="templateDesc" class="form-textarea" rows="2" placeholder="Kratak opis šta ovaj templejt sadrži"></textarea>
+      </div>
+
+      <!-- Polja trenutno u tabeli -->
+      <div class="form-group">
+        <label class="form-label">Polja koja će biti uključena:</label>
+        <div id="templateFieldsList" class="template-fields-preview"></div>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button id="btnCancelEditTemplate" class="btn-secondary">Otkaži</button>
+      <button id="btnSaveTemplate" class="btn-primary">Sačuvaj</button>
+    </div>
+  </div>
+
   <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <script src="taskpane.js"></script>
 

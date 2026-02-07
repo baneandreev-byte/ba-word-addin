@@ -6,12 +6,12 @@
   xsi:type="TaskPaneApp">
 
   <!-- ============================================ -->
-  <!-- VERZIJA: 1.0.0.37 (V29) - DRAG AND DROP -->
+  <!-- VERZIJA: 1.0.0.38 (V30) - SHAREPOINT TEMPLATES -->
   <!-- Datum: 2025-02-07 -->
   <!-- ============================================ -->
 
   <Id>10118cd9-088f-498a-aae7-05c50d6d258a</Id>
-  <Version>1.0.0.37</Version>
+  <Version>1.0.0.38</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
@@ -31,11 +31,23 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V37"/>
+    <SourceLocation DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V38"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
 
+  <!-- ============================================ -->
+  <!-- GRAPH API SSO (V30 - SharePoint Templates) -->
+  <!-- ============================================ -->
+  <WebApplicationInfo>
+    <Id>10118cd9-088f-498a-aae7-05c50d6d258a</Id>
+    <Resource>https://graph.microsoft.com</Resource>
+    <Scopes>
+      <Scope>Files.Read.All</Scope>
+      <Scope>Sites.Read.All</Scope>
+      <Scope>User.Read</Scope>
+    </Scopes>
+  </WebApplicationInfo>
   <VersionOverrides
     xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
     xsi:type="VersionOverridesV1_0">
@@ -96,7 +108,7 @@
       </bt:Images>
 
       <bt:Urls>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V37"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V38"/>
         <bt:Url id="Commands.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/commands.html"/>
       </bt:Urls>
 

@@ -1,12 +1,11 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V37 (CSS GRID FIX - FINAL)
+// VERZIJA: 2025-02-07 - V38 (SHAREPOINT TEMPLATES)
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V37");
-console.log("✅ FIX: Grid columns - 26px 1fr 1.3fr 72px (realne širine)");
-console.log("✅ FIX: Obrisan dupli .row override koji je ubijao izmene");
-console.log("✅ Praznina GONE, layout SAVRŠEN!");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V38");
+console.log("✅ NOVO: SharePoint templejti - Graph API integracija");
+console.log("✅ SSO pristup SharePoint-u za učitavanje templata");
 
 let rows = [];
 let selectedRowIndex = null;
@@ -996,12 +995,603 @@ async function importCSV() {
   input.click();
 }
 
+// ============================================
+// TEMPLATE MANAGER (V30 - SharePoint Integration)
+// ============================================
+
+// SharePoint site configuration
+const SHAREPOINT_CONFIG = {
+  siteUrl: "https://biroa.sharepoint.com/sites/Officetamplates",
+  folderPath: "/sites/Officetamplates/Deljeni dokumenti/Table addin word templetes"
+};
+
+let templates = [];
+let editingTemplateId = null;
+
+// ---------- Graph API Helpers ----------
+
+// Get access token for Graph API
+async function getGraphToken() {
+  try {
+    const token = await OfficeRuntime.auth.getAccessToken({
+      allowSignInPrompt: true,
+      forMSGraphAccess: true
+    });
+    return token;
+  } catch (error) {
+    console.error("❌ Greška pri dobijanju tokena:", error);
+    throw new Error("Ne mogu da dobijem pristup SharePoint-u. Proveri da li si ulogovan.");
+  }
+}
+
+// Call Graph API
+async function callGraphAPI(endpoint, method = "GET", body = null) {
+  try {
+    const token = await getGraphToken();
+    
+    const options = {
+      method: method,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    };
+    
+    if (body) {
+      options.body = JSON.stringify(body);
+    }
+    
+    const response = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, options);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Graph API greška:", response.status, errorText);
+      throw new Error(`Graph API greška: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("❌ callGraphAPI greška:", error);
+    throw error;
+  }
+}
+
+// Get SharePoint site ID
+async function getSharePointSiteId() {
+  try {
+    // Extract hostname and site path from URL
+    const url = new URL(SHAREPOINT_CONFIG.siteUrl);
+    const hostname = url.hostname;
+    const sitePath = url.pathname;
+    
+    // Call Graph API to get site
+    const site = await callGraphAPI(`/sites/${hostname}:${sitePath}`);
+    return site.id;
+  } catch (error) {
+    console.error("❌ getSharePointSiteId greška:", error);
+    throw error;
+  }
+}
+
+// Get files from SharePoint folder
+async function getSharePointFiles(folderPath) {
+  try {
+    const siteId = await getSharePointSiteId();
+    
+    // Encode folder path
+    const encodedPath = encodeURIComponent(folderPath);
+    
+    // Get drive items
+    const result = await callGraphAPI(`/sites/${siteId}/drive/root:${encodedPath}:/children`);
+    
+    // Filter only .docx files
+    const docxFiles = result.value.filter(file => 
+      file.name.toLowerCase().endsWith('.docx') && !file.name.startsWith('~')
+    );
+    
+    console.log(`✅ Pronađeno ${docxFiles.length} .docx fajlova`);
+    return docxFiles;
+  } catch (error) {
+    console.error("❌ getSharePointFiles greška:", error);
+    throw error;
+  }
+}
+
+// Download file content from SharePoint
+async function downloadFileContent(fileId) {
+  try {
+    const siteId = await getSharePointSiteId();
+    const token = await getGraphToken();
+    
+    // Get download URL
+    const response = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${fileId}/content`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Download greška: ${response.status}`);
+    }
+    
+    return await response.arrayBuffer();
+  } catch (error) {
+    console.error("❌ downloadFileContent greška:", error);
+    throw error;
+  }
+}
+
+// Extract fields from .docx file
+async function extractFieldsFromDocx(arrayBuffer) {
+  try {
+    // Load the docx file using JSZip
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    
+    // Read document.xml
+    const docXml = await zip.file("word/document.xml").async("string");
+    
+    // Parse XML
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(docXml, "text/xml");
+    
+    // Find all content controls with BA_FIELD tags
+    const controls = doc.querySelectorAll('w\\:tag, tag');
+    const fields = [];
+    
+    controls.forEach(tagNode => {
+      const tagValue = tagNode.getAttribute('w:val') || tagNode.textContent;
+      const parsed = parseTag(tagValue);
+      
+      if (parsed) {
+        // Check if field already exists
+        if (!fields.find(f => f.field === parsed.key)) {
+          fields.push({
+            field: parsed.key,
+            type: parsed.type,
+            format: parsed.format
+          });
+        }
+      }
+    });
+    
+    console.log(`✅ Ekstraktovano ${fields.length} polja iz dokumenta`);
+    return fields;
+  } catch (error) {
+    console.error("❌ extractFieldsFromDocx greška:", error);
+    return [];
+  }
+}
+
+// ---------- Template Management ----------
+
+// Učitaj templejte sa SharePointa
+async function loadTemplatesFromSharePoint() {
+  try {
+    setStatus("Učitavam templejte sa SharePointa...", "info");
+    
+    const files = await getSharePointFiles(SHAREPOINT_CONFIG.folderPath);
+    
+    templates = files.map(file => ({
+      id: file.id,
+      name: file.name.replace('.docx', ''),
+      desc: `SharePoint: ${new Date(file.lastModifiedDateTime).toLocaleDateString('sr-RS')}`,
+      fileId: file.id,
+      downloadUrl: file['@microsoft.graph.downloadUrl'],
+      fields: [] // Will be loaded on demand
+    }));
+    
+    console.log("✅ Učitano", templates.length, "templata sa SharePointa");
+    setStatus(`Učitano ${templates.length} templata`, "success");
+  } catch (error) {
+    console.error("❌ Greška pri učitavanju templata:", error);
+    setStatus("Greška pri učitavanju templata sa SharePointa", "error");
+    templates = [];
+    
+    // Fallback to local XML if SharePoint fails
+    console.log("⚠️ Pokušavam da učitam lokalne templejte...");
+    await loadTemplatesFromDocument();
+  }
+}
+
+// Fallback: Učitaj templejte iz lokalnog XML-a  
+async function loadTemplatesFromDocument() {
+  try {
+    await Word.run(async (context) => {
+      const parts = context.document.customXmlParts;
+      parts.load("items");
+      await context.sync();
+
+      const targetNamespace = "http://biroa.com/word-addin/templates";
+      const targetParts = parts.items.filter(
+        (p) => p.namespaceUri === targetNamespace
+      );
+
+      if (targetParts.length > 0) {
+        const xml = targetParts[0].getXml();
+        await context.sync();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xml.value, "text/xml");
+        const templateNodes = doc.querySelectorAll("template");
+        
+        templates = [];
+        templateNodes.forEach((node) => {
+          const id = node.getAttribute("id") || crypto.randomUUID();
+          const name = node.getAttribute("name") || "";
+          const desc = node.getAttribute("description") || "";
+          const fieldsNode = node.querySelector("fields");
+          const fields = [];
+          
+          if (fieldsNode) {
+            fieldsNode.querySelectorAll("field").forEach((f) => {
+              fields.push({
+                field: f.getAttribute("field") || "",
+                type: f.getAttribute("type") || "text",
+                format: f.getAttribute("format") || "text:auto",
+              });
+            });
+          }
+          
+          templates.push({ id, name, desc, fields });
+        });
+        
+        console.log("✅ Učitano", templates.length, "templata");
+      } else {
+        console.log("ℹ️ Nema sačuvanih templata");
+        templates = [];
+      }
+    });
+  } catch (err) {
+    console.error("Greška pri učitavanju templata:", err);
+    templates = [];
+  }
+}
+
+// Sačuvaj templejte u XML
+async function saveTemplatesToDocument() {
+  try {
+    await Word.run(async (context) => {
+      const parts = context.document.customXmlParts;
+      parts.load("items");
+      await context.sync();
+
+      const targetNamespace = "http://biroa.com/word-addin/templates";
+      const targetParts = parts.items.filter(
+        (p) => p.namespaceUri === targetNamespace
+      );
+
+      targetParts.forEach((p) => p.delete());
+      await context.sync();
+
+      let xml = `<?xml version="1.0" encoding="UTF-8"?><root xmlns="${targetNamespace}">`;
+      
+      templates.forEach((t) => {
+        xml += `<template id="${t.id}" name="${escapeXml(t.name)}" description="${escapeXml(t.desc || '')}">`;
+        xml += `<fields>`;
+        t.fields.forEach((f) => {
+          xml += `<field field="${escapeXml(f.field)}" type="${f.type}" format="${f.format}" />`;
+        });
+        xml += `</fields></template>`;
+      });
+      
+      xml += `</root>`;
+      
+      parts.add(xml);
+      await context.sync();
+      
+      console.log("✅ Sačuvano", templates.length, "templata");
+    });
+  } catch (err) {
+    console.error("Greška pri čuvanju templata:", err);
+    setStatus("Greška pri čuvanju templata", "error");
+  }
+}
+
+function escapeXml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// Prikaz liste templata
+function renderTemplatesList() {
+  const list = el("templatesList");
+  if (!list) return;
+  
+  if (templates.length === 0) {
+    list.innerHTML = '<div class="empty-state">Nema sačuvanih templata</div>';
+    return;
+  }
+  
+  list.innerHTML = "";
+  
+  templates.forEach((t) => {
+    const card = document.createElement("div");
+    card.className = "template-card";
+    
+    const header = document.createElement("div");
+    header.className = "template-card-header";
+    
+    const title = document.createElement("h4");
+    title.className = "template-card-title";
+    title.textContent = t.name;
+    header.appendChild(title);
+    
+    const actions = document.createElement("div");
+    actions.className = "template-card-actions";
+    
+    const btnLoad = document.createElement("button");
+    btnLoad.className = "template-card-btn";
+    btnLoad.innerHTML = "📥";
+    btnLoad.title = "Učitaj templejt";
+    btnLoad.addEventListener("click", (e) => {
+      e.stopPropagation();
+      loadTemplate(t.id);
+    });
+    
+    const btnEdit = document.createElement("button");
+    btnEdit.className = "template-card-btn";
+    btnEdit.innerHTML = "✏️";
+    btnEdit.title = "Izmeni";
+    btnEdit.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openEditTemplateModal(t.id);
+    });
+    
+    const btnDelete = document.createElement("button");
+    btnDelete.className = "template-card-btn delete";
+    btnDelete.innerHTML = "🗑️";
+    btnDelete.title = "Obriši";
+    btnDelete.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (confirm(`Da li želiš da obrišeš templejt "${t.name}"?`)) {
+        await deleteTemplate(t.id);
+      }
+    });
+    
+    actions.appendChild(btnLoad);
+    actions.appendChild(btnEdit);
+    actions.appendChild(btnDelete);
+    header.appendChild(actions);
+    card.appendChild(header);
+    
+    if (t.desc) {
+      const desc = document.createElement("div");
+      desc.className = "template-card-desc";
+      desc.textContent = t.desc;
+      card.appendChild(desc);
+    }
+    
+    const meta = document.createElement("div");
+    meta.className = "template-card-meta";
+    
+    const fieldsInfo = document.createElement("span");
+    fieldsInfo.className = "template-card-fields";
+    fieldsInfo.textContent = `${t.fields.length} ${t.fields.length === 1 ? 'polje' : t.fields.length < 5 ? 'polja' : 'polja'}`;
+    meta.appendChild(fieldsInfo);
+    
+    card.appendChild(meta);
+    
+    card.addEventListener("click", () => {
+      loadTemplate(t.id);
+    });
+    
+    list.appendChild(card);
+  });
+}
+
+// Učitaj templejt u tabelu
+async function loadTemplate(templateId) {
+  const template = templates.find((t) => t.id === templateId);
+  if (!template) return;
+  
+  try {
+    setStatus(`Učitavam templejt: ${template.name}...`, "info");
+    
+    // If template is from SharePoint and fields not loaded yet
+    if (template.fileId && template.fields.length === 0) {
+      console.log("📥 Skidam fajl sa SharePointa:", template.name);
+      
+      const arrayBuffer = await downloadFileContent(template.fileId);
+      template.fields = await extractFieldsFromDocx(arrayBuffer);
+      
+      if (template.fields.length === 0) {
+        setStatus("Templejt nema polja ili nisu pronađena", "error");
+        return;
+      }
+    }
+    
+    // Load fields into table
+    rows = template.fields.map((f) => ({
+      id: crypto.randomUUID(),
+      field: f.field,
+      value: "",
+      type: f.type,
+      format: f.format,
+    }));
+    
+    renderRows();
+    await saveStateToDocument();
+    closeTemplatesModal();
+    setStatus(`Učitan templejt: ${template.name} (${template.fields.length} polja)`, "success");
+  } catch (error) {
+    console.error("❌ Greška pri učitavanju templata:", error);
+    setStatus("Greška pri učitavanju templata", "error");
+  }
+}
+
+// Obriši templejt
+async function deleteTemplate(templateId) {
+  templates = templates.filter((t) => t.id !== templateId);
+  await saveTemplatesToDocument();
+  renderTemplatesList();
+  setStatus("Templejt obrisan", "success");
+}
+
+// Otvori modal za templejte
+function openTemplatesModal() {
+  const backdrop = el("modalTemplatesBackdrop");
+  const modal = el("modalTemplates");
+  if (backdrop) backdrop.classList.remove("hidden");
+  if (modal) modal.classList.remove("hidden");
+  renderTemplatesList();
+}
+
+// Zatvori modal za templejte
+function closeTemplatesModal() {
+  const backdrop = el("modalTemplatesBackdrop");
+  const modal = el("modalTemplates");
+  if (backdrop) backdrop.classList.add("hidden");
+  if (modal) modal.classList.add("hidden");
+}
+
+// Otvori modal za editovanje templata
+function openEditTemplateModal(templateId = null) {
+  editingTemplateId = templateId;
+  
+  const backdrop = el("modalEditTemplateBackdrop");
+  const modal = el("modalEditTemplate");
+  const title = el("editTemplateTitle");
+  const nameInput = el("templateName");
+  const descInput = el("templateDesc");
+  const fieldsList = el("templateFieldsList");
+  
+  if (!backdrop || !modal) return;
+  
+  if (templateId) {
+    // Editing existing
+    const template = templates.find((t) => t.id === templateId);
+    if (!template) return;
+    
+    if (title) title.textContent = "Izmeni templejt";
+    if (nameInput) nameInput.value = template.name;
+    if (descInput) descInput.value = template.desc || "";
+    
+    // Show template fields
+    if (fieldsList) {
+      fieldsList.innerHTML = "";
+      if (template.fields.length === 0) {
+        fieldsList.classList.add("empty");
+        fieldsList.textContent = "Nema polja";
+      } else {
+        fieldsList.classList.remove("empty");
+        template.fields.forEach((f) => {
+          const tag = document.createElement("span");
+          tag.className = "template-field-tag";
+          tag.textContent = f.field;
+          fieldsList.appendChild(tag);
+        });
+      }
+    }
+  } else {
+    // New template
+    if (title) title.textContent = "Novi templejt";
+    if (nameInput) nameInput.value = "";
+    if (descInput) descInput.value = "";
+    
+    // Show current table fields
+    if (fieldsList) {
+      fieldsList.innerHTML = "";
+      if (rows.length === 0) {
+        fieldsList.classList.add("empty");
+        fieldsList.textContent = "Nema polja u tabeli";
+      } else {
+        fieldsList.classList.remove("empty");
+        rows.forEach((r) => {
+          if (r.field) {
+            const tag = document.createElement("span");
+            tag.className = "template-field-tag";
+            tag.textContent = r.field;
+            fieldsList.appendChild(tag);
+          }
+        });
+      }
+    }
+  }
+  
+  backdrop.classList.remove("hidden");
+  modal.classList.remove("hidden");
+  
+  if (nameInput) nameInput.focus();
+}
+
+// Zatvori modal za editovanje templata
+function closeEditTemplateModal() {
+  const backdrop = el("modalEditTemplateBackdrop");
+  const modal = el("modalEditTemplate");
+  if (backdrop) backdrop.classList.add("hidden");
+  if (modal) modal.classList.add("hidden");
+  editingTemplateId = null;
+}
+
+// Sačuvaj templejt
+async function saveTemplate() {
+  const nameInput = el("templateName");
+  const descInput = el("templateDesc");
+  
+  if (!nameInput) return;
+  
+  const name = nameInput.value.trim();
+  if (!name) {
+    setStatus("Unesi ime templata", "error");
+    nameInput.focus();
+    return;
+  }
+  
+  const desc = descInput ? descInput.value.trim() : "";
+  
+  if (editingTemplateId) {
+    // Update existing
+    const template = templates.find((t) => t.id === editingTemplateId);
+    if (template) {
+      template.name = name;
+      template.desc = desc;
+      // Keep existing fields
+    }
+  } else {
+    // Create new from current table
+    const fields = rows
+      .filter((r) => r.field.trim())
+      .map((r) => ({
+        field: r.field,
+        type: r.type,
+        format: r.format,
+      }));
+    
+    if (fields.length === 0) {
+      setStatus("Nema polja u tabeli za čuvanje", "error");
+      return;
+    }
+    
+    templates.push({
+      id: crypto.randomUUID(),
+      name,
+      desc,
+      fields,
+    });
+  }
+  
+  await saveTemplatesToDocument();
+  closeEditTemplateModal();
+  setStatus(`Templejt "${name}" sačuvan`, "success");
+  
+  // If templates modal is open, refresh it
+  const templatesModal = el("modalTemplates");
+  if (templatesModal && !templatesModal.classList.contains("hidden")) {
+    renderTemplatesList();
+  }
+}
+
 // ---------- wiring ----------
 function bindUi() {
   const btnInsert = el("btnInsert");
   const btnFill = el("btnFill");
   const btnClear = el("btnClear");
   const btnDelete = el("btnDelete");
+  const btnTemplates = el("btnTemplates");
   const btnAddRow = el("btnAddRow");
   const btnExportCSV = el("btnExportCSV");
   const btnImportCSV = el("btnImportCSV");
@@ -1016,10 +1606,18 @@ function bindUi() {
   const btnDeleteCancel = el("btnDeleteCancel");
   const btnDeleteConfirm = el("btnDeleteConfirm");
 
+  // Templates modal buttons
+  const btnModalTemplatesClose = el("btnModalTemplatesClose");
+  const btnNewTemplate = el("btnNewTemplate");
+  const btnModalEditTemplateClose = el("btnModalEditTemplateClose");
+  const btnCancelEditTemplate = el("btnCancelEditTemplate");
+  const btnSaveTemplate = el("btnSaveTemplate");
+
   if (btnInsert) btnInsert.addEventListener("click", insertFieldAtSelection);
   if (btnFill) btnFill.addEventListener("click", fillFieldsFromTable);
   if (btnClear) btnClear.addEventListener("click", clearFieldsKeepControls);
   if (btnDelete) btnDelete.addEventListener("click", deleteControlsAndXml);
+  if (btnTemplates) btnTemplates.addEventListener("click", openTemplatesModal);
   if (btnExportCSV) btnExportCSV.addEventListener("click", exportCSV);
   if (btnImportCSV) btnImportCSV.addEventListener("click", importCSV);
 
@@ -1051,11 +1649,24 @@ function bindUi() {
     });
   }
   
+  // Templates modal events
+  if (btnModalTemplatesClose) btnModalTemplatesClose.addEventListener("click", closeTemplatesModal);
+  if (btnNewTemplate) btnNewTemplate.addEventListener("click", () => openEditTemplateModal(null));
+  
+  // Edit template modal events
+  if (btnModalEditTemplateClose) btnModalEditTemplateClose.addEventListener("click", closeEditTemplateModal);
+  if (btnCancelEditTemplate) btnCancelEditTemplate.addEventListener("click", closeEditTemplateModal);
+  if (btnSaveTemplate) btnSaveTemplate.addEventListener("click", saveTemplate);
+  
   // Spreci da klik NA modal zatvara modal
   const modal = el("modal");
   const deleteModal = el("deleteModal");
+  const templatesModal = el("modalTemplates");
+  const editTemplateModal = el("modalEditTemplate");
   if (modal) modal.addEventListener("click", (e) => e.stopPropagation());
   if (deleteModal) deleteModal.addEventListener("click", (e) => e.stopPropagation());
+  if (templatesModal) templatesModal.addEventListener("click", (e) => e.stopPropagation());
+  if (editTemplateModal) editTemplateModal.addEventListener("click", (e) => e.stopPropagation());
   
   // Backdrop zatvara modal SAMO ako klikneš na backdrop (ne na modal)
   if (modalBackdrop) {
@@ -1065,11 +1676,30 @@ function bindUi() {
       closeDeleteModal();
     });
   }
+  
+  // Templates backdrop
+  const templatesBackdrop = el("modalTemplatesBackdrop");
+  if (templatesBackdrop) {
+    templatesBackdrop.addEventListener("click", (e) => {
+      if (e.target !== templatesBackdrop) return;
+      closeTemplatesModal();
+    });
+  }
+  
+  // Edit template backdrop
+  const editTemplateBackdrop = el("modalEditTemplateBackdrop");
+  if (editTemplateBackdrop) {
+    editTemplateBackdrop.addEventListener("click", (e) => {
+      if (e.target !== editTemplateBackdrop) return;
+      closeEditTemplateModal();
+    });
+  }
 }
 
 Office.onReady(async () => {
   try {
     await loadStateFromDocument();
+    await loadTemplatesFromSharePoint(); // Load from SharePoint
   } catch (e) {
     console.error("Load state error:", e);
   }
