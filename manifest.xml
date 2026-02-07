@@ -6,12 +6,12 @@
   xsi:type="TaskPaneApp">
 
   <!-- ============================================ -->
-  <!-- VERZIJA: 1.0.0.42 (V42) - SHAREPOINT TEMPLATES -->
+  <!-- VERZIJA: 1.0.0.44 (V44) - SHAREPOINT TEMPLATES -->
   <!-- Datum: 2025-02-07 -->
   <!-- ============================================ -->
 
   <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
-  <Version>1.0.0.42</Version>
+  <Version>1.0.0.44</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
@@ -31,7 +31,7 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V42"/>
+    <SourceLocation DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V44"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -96,7 +96,7 @@
       </bt:Images>
 
       <bt:Urls>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V42"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V44"/>
         <bt:Url id="Commands.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/commands.html"/>
       </bt:Urls>
 
@@ -112,7 +112,7 @@
 
 
     <!-- ============================================ -->
-    <!-- GRAPH API SSO (V42 - SharePoint Templates) -->
+    <!-- GRAPH API SSO (V44 - SharePoint Templates) -->
     <!-- ============================================ -->
     <WebApplicationInfo>
       <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
