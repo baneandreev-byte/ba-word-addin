@@ -1,19 +1,20 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V32 (FLEX GRID FIX)
+// VERZIJA: 2025-02-07 - V34 (STABILNI DRAG & DROP)
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V32");
-console.log("✅ FIX: Fleksibilne kolone sa minmax(150px, 1fr) - ne šire se previše");
-console.log("✅ Handle i dugmići fiksni, POLJE i ODGOVOR fleksibilni");
-console.log("✅ Drag & Drop reordering radi");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V34");
+console.log("✅ FIX: Drag & Drop koristi stabilne ID-ove umesto index-a");
+console.log("✅ FIX: stopPropagation na ⚙ i × sprečava duhove klikova");
+console.log("✅ FIX: Modal backdrop guard - klik samo na prazno zatvara modal");
+console.log("✅ Sve stabilno i radi kako treba!");
 
 let rows = [];
 let selectedRowIndex = null;
 
-// Drag & Drop state
+// Drag & Drop state (koristi ID umesto index za stabilnost)
 let draggedElement = null;
-let draggedIndex = null;
+let draggedId = null;
 
 // Format options per type
 const FORMAT_OPTIONS = {
@@ -199,7 +200,7 @@ function buildValueMap() {
 // ---------- Drag & Drop handlers ----------
 function handleDragStart(e) {
   draggedElement = this;
-  draggedIndex = parseInt(this.dataset.index);
+  draggedId = this.dataset.id;
   
   this.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
@@ -243,18 +244,24 @@ function handleDrop(e) {
     return false;
   }
   
-  const targetIndex = parseInt(targetRow.dataset.index);
+  const targetId = targetRow.dataset.id;
+  
+  // Pronađi indekse u rows array-u pomoću ID-a (stabilno)
+  const fromIndex = rows.findIndex(r => r.id === draggedId);
+  const toIndex = rows.findIndex(r => r.id === targetId);
+  
+  if (fromIndex === -1 || toIndex === -1) return false;
   
   // Reorder rows array
-  const [movedItem] = rows.splice(draggedIndex, 1);
-  rows.splice(targetIndex, 0, movedItem);
+  const [movedItem] = rows.splice(fromIndex, 1);
+  rows.splice(toIndex, 0, movedItem);
   
   // Update selected index if needed
-  if (selectedRowIndex === draggedIndex) {
-    selectedRowIndex = targetIndex;
-  } else if (draggedIndex < selectedRowIndex && targetIndex >= selectedRowIndex) {
+  if (selectedRowIndex === fromIndex) {
+    selectedRowIndex = toIndex;
+  } else if (fromIndex < selectedRowIndex && toIndex >= selectedRowIndex) {
     selectedRowIndex--;
-  } else if (draggedIndex > selectedRowIndex && targetIndex <= selectedRowIndex) {
+  } else if (fromIndex > selectedRowIndex && toIndex <= selectedRowIndex) {
     selectedRowIndex++;
   }
   
@@ -277,7 +284,7 @@ function handleDragEnd(e) {
   });
   
   draggedElement = null;
-  draggedIndex = null;
+  draggedId = null;
 }
 
 // ---------- render rows ----------
@@ -300,13 +307,17 @@ function renderRows() {
   }
 
   rows.forEach((r, idx) => {
+    // Osiguraj da svaki red ima ID
+    if (!r.id) r.id = crypto.randomUUID();
+    
     const row = document.createElement("div");
     row.className = "row";
     if (idx === selectedRowIndex) row.classList.add("selected");
     
-    // Make row draggable
+    // Make row draggable - koristi ID umesto index
     row.draggable = true;
-    row.dataset.index = idx;
+    row.dataset.id = r.id;
+    row.dataset.index = idx; // Zadrži index za backward compatibility
     
     // Drag event listeners
     row.addEventListener('dragstart', handleDragStart);
@@ -410,7 +421,8 @@ function renderRows() {
       btnEdit.style.background = "#e0f2fe";
       btnEdit.style.transform = "scale(1)";
     });
-    btnEdit.addEventListener("click", () => {
+    btnEdit.addEventListener("click", (e) => {
+      e.stopPropagation();
       selectedRowIndex = idx;
       openModal(r);
     });
@@ -418,7 +430,8 @@ function renderRows() {
     const btnDelete = document.createElement("button");
     btnDelete.innerHTML = "×";
     btnDelete.title = "Obriši red";
-    btnDelete.addEventListener("click", () => {
+    btnDelete.addEventListener("click", (e) => {
+      e.stopPropagation();
       if (confirm(`Obrisati polje "${r.field}"?`)) {
         rows.splice(idx, 1);
         if (selectedRowIndex === idx) selectedRowIndex = null;
@@ -502,6 +515,23 @@ function openModal(row) {
 
 function closeModal() {
   const modal = el("modal");
+  const backdrop = el("modalBackdrop");
+  if (modal) modal.classList.add("hidden");
+  if (backdrop) backdrop.classList.add("hidden");
+}
+
+// ---------- Delete Confirm Modal ----------
+function showDeleteConfirmModal() {
+  const modal = el("deleteModal");
+  const backdrop = el("modalBackdrop");
+  if (!modal || !backdrop) return;
+  
+  modal.classList.remove("hidden");
+  backdrop.classList.remove("hidden");
+}
+
+function closeDeleteModal() {
+  const modal = el("deleteModal");
   const backdrop = el("modalBackdrop");
   if (modal) modal.classList.add("hidden");
   if (backdrop) backdrop.classList.add("hidden");
@@ -762,20 +792,14 @@ async function clearFieldsKeepControls() {
 }
 
 // ============================================
-// FIX: deleteControlsAndXml - Konačno rešenje
+// FIX: deleteControlsAndXml - Custom Modal umesto confirm()
 // ============================================
 async function deleteControlsAndXml() {
-  const confirmed = confirm(
-    "PAŽNJA: Ova akcija će trajno obrisati sva polja i plugin podatke iz dokumenta.\n\n" +
-      "Content controls će biti uklonjeni, ali tekst će ostati.\n\n" +
-      "Da li želiš da nastaviš?"
-  );
+  // Prikaži custom confirm modal
+  showDeleteConfirmModal();
+}
 
-  if (!confirmed) {
-    setStatus("Brisanje otkazano.", "info");
-    return;
-  }
-
+async function performDelete() {
   try {
     console.log("🔴 Počinjem brisanje content controls...");
     
@@ -940,7 +964,13 @@ async function importCSV() {
       const field = (parts[0] || "").trim();
       const value = (parts.slice(1).join(usedDelim) || "").trim();
       if (field) {
-        newRows.push({ field, value, type: "text", format: "text:auto" });
+        newRows.push({ 
+          id: crypto.randomUUID(), 
+          field, 
+          value, 
+          type: "text", 
+          format: "text:auto" 
+        });
       }
     }
 
@@ -971,6 +1001,11 @@ function bindUi() {
   const btnModalOk = el("btnModalOk");
   const modalBackdrop = el("modalBackdrop");
 
+  // Delete modal buttons
+  const btnDeleteModalClose = el("btnDeleteModalClose");
+  const btnDeleteCancel = el("btnDeleteCancel");
+  const btnDeleteConfirm = el("btnDeleteConfirm");
+
   if (btnInsert) btnInsert.addEventListener("click", insertFieldAtSelection);
   if (btnFill) btnFill.addEventListener("click", fillFieldsFromTable);
   if (btnClear) btnClear.addEventListener("click", clearFieldsKeepControls);
@@ -980,7 +1015,13 @@ function bindUi() {
 
   if (btnAddRow) {
     btnAddRow.addEventListener("click", () => {
-      rows.push({ field: "", value: "", type: "text", format: "text:auto" });
+      rows.push({ 
+        id: crypto.randomUUID(), 
+        field: "", 
+        value: "", 
+        type: "text", 
+        format: "text:auto" 
+      });
       renderRows();
       saveStateToDocument();
     });
@@ -989,7 +1030,31 @@ function bindUi() {
   if (btnModalClose) btnModalClose.addEventListener("click", closeModal);
   if (btnModalCancel) btnModalCancel.addEventListener("click", closeModal);
   if (btnModalOk) btnModalOk.addEventListener("click", saveModalChanges);
-  if (modalBackdrop) modalBackdrop.addEventListener("click", closeModal);
+  
+  // Delete modal events
+  if (btnDeleteModalClose) btnDeleteModalClose.addEventListener("click", closeDeleteModal);
+  if (btnDeleteCancel) btnDeleteCancel.addEventListener("click", closeDeleteModal);
+  if (btnDeleteConfirm) {
+    btnDeleteConfirm.addEventListener("click", async () => {
+      closeDeleteModal();
+      await performDelete();
+    });
+  }
+  
+  // Spreci da klik NA modal zatvara modal
+  const modal = el("modal");
+  const deleteModal = el("deleteModal");
+  if (modal) modal.addEventListener("click", (e) => e.stopPropagation());
+  if (deleteModal) deleteModal.addEventListener("click", (e) => e.stopPropagation());
+  
+  // Backdrop zatvara modal SAMO ako klikneš na backdrop (ne na modal)
+  if (modalBackdrop) {
+    modalBackdrop.addEventListener("click", (e) => {
+      if (e.target !== modalBackdrop) return; // samo klik na "prazno"
+      closeModal();
+      closeDeleteModal();
+    });
+  }
 }
 
 Office.onReady(async () => {
