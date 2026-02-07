@@ -10,7 +10,6 @@ body {
   font-size: 14px;
   color: #1f2937;
   background: #f9fafb;
-  overflow-x: hidden;
 }
 
 .shell {
@@ -85,8 +84,8 @@ body {
 /* ========== Table ========== */
 .table-header {
   display: grid;
-  grid-template-columns: 14px minmax(150px, 1fr) minmax(150px, 1fr) 80px;
-  gap: 4px;
+  grid-template-columns: 26px 1fr 1.3fr 72px;
+  gap: 8px;
   padding: 10px 14px;
   background: #f3f4f6;
   border-radius: 8px 8px 0 0;
@@ -113,8 +112,8 @@ body {
 
 .row {
   display: grid;
-  grid-template-columns: 14px minmax(150px, 1fr) minmax(150px, 1fr) 80px;
-  gap: 4px;
+  grid-template-columns: 26px 1fr 1.3fr 72px;
+  gap: 8px;
   padding: 10px 14px;
   border-top: 1px solid #e5e7eb;
   transition: background 0.15s;
@@ -193,13 +192,13 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   margin-bottom: 16px;
 }
 
 .csv-group {
   display: flex;
-  gap: 4px;
+  gap: 8px;
 }
 
 .btn-primary,
@@ -332,7 +331,7 @@ body {
 
 .modal-footer {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   padding: 20px 24px;
   border-top: 1px solid #e5e7eb;
   justify-content: flex-end;
@@ -378,7 +377,7 @@ body {
 .radio-label {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   cursor: pointer;
   padding: 10px 14px;
   border: 2px solid #d1d5db;
@@ -477,9 +476,6 @@ body {
 }
 
 .row {
-  grid-template-columns: 1fr 1fr 80px !important;
-}
-
 .row.selected {
   background: #eff6ff !important;
   border-left: 3px solid #2563eb;
@@ -487,7 +483,8 @@ body {
 
 .del {
   display: flex;
-  gap: 4px;
+  width: 72px;
+  gap: 8px;
   align-items: center;
   justify-content: center;
 }
@@ -495,11 +492,12 @@ body {
 
 /* Drag handle */
 .drag-handle {
-  width: 14px;
+  width: 26px;
   height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
+  justify-self: center; /* Centrira u grid koloni */
   cursor: grab;
   color: #9ca3af;
   font-size: 14px;

@@ -1,13 +1,12 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V34 (STABILNI DRAG & DROP)
+// VERZIJA: 2025-02-07 - V37 (CSS GRID FIX - FINAL)
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V34");
-console.log("✅ FIX: Drag & Drop koristi stabilne ID-ove umesto index-a");
-console.log("✅ FIX: stopPropagation na ⚙ i × sprečava duhove klikova");
-console.log("✅ FIX: Modal backdrop guard - klik samo na prazno zatvara modal");
-console.log("✅ Sve stabilno i radi kako treba!");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V37");
+console.log("✅ FIX: Grid columns - 26px 1fr 1.3fr 72px (realne širine)");
+console.log("✅ FIX: Obrisan dupli .row override koji je ubijao izmene");
+console.log("✅ Praznina GONE, layout SAVRŠEN!");
 
 let rows = [];
 let selectedRowIndex = null;
@@ -199,12 +198,15 @@ function buildValueMap() {
 
 // ---------- Drag & Drop handlers ----------
 function handleDragStart(e) {
-  draggedElement = this;
-  draggedId = this.dataset.id;
+  const handle = e.currentTarget; // handle element
+  const rowEl = handle.closest(".row");
   
-  this.classList.add('dragging');
+  draggedElement = rowEl;
+  draggedId = handle.dataset.id;
+  
+  rowEl.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/html', this.innerHTML);
+  e.dataTransfer.setData('text/plain', draggedId); // stabilnije od text/html
 }
 
 function handleDragOver(e) {
@@ -256,13 +258,15 @@ function handleDrop(e) {
   const [movedItem] = rows.splice(fromIndex, 1);
   rows.splice(toIndex, 0, movedItem);
   
-  // Update selected index if needed
-  if (selectedRowIndex === fromIndex) {
-    selectedRowIndex = toIndex;
-  } else if (fromIndex < selectedRowIndex && toIndex >= selectedRowIndex) {
-    selectedRowIndex--;
-  } else if (fromIndex > selectedRowIndex && toIndex <= selectedRowIndex) {
-    selectedRowIndex++;
+  // Update selected index if needed - guard protiv null/undefined
+  if (selectedRowIndex !== null && selectedRowIndex !== undefined) {
+    if (selectedRowIndex === fromIndex) {
+      selectedRowIndex = toIndex;
+    } else if (fromIndex < selectedRowIndex && toIndex >= selectedRowIndex) {
+      selectedRowIndex--;
+    } else if (fromIndex > selectedRowIndex && toIndex <= selectedRowIndex) {
+      selectedRowIndex++;
+    }
   }
   
   // Re-render and save
@@ -275,8 +279,10 @@ function handleDrop(e) {
   return false;
 }
 
-function handleDragEnd(e) {
-  this.classList.remove('dragging');
+function handleDragEnd() {
+  if (draggedElement) {
+    draggedElement.classList.remove('dragging');
+  }
   
   // Remove all drag-over classes
   document.querySelectorAll('.row').forEach(row => {
@@ -314,17 +320,15 @@ function renderRows() {
     row.className = "row";
     if (idx === selectedRowIndex) row.classList.add("selected");
     
-    // Make row draggable - koristi ID umesto index
-    row.draggable = true;
+    // Red NIJE draggable - samo handle jeste
+    row.draggable = false;
     row.dataset.id = r.id;
     row.dataset.index = idx; // Zadrži index za backward compatibility
     
-    // Drag event listeners
-    row.addEventListener('dragstart', handleDragStart);
+    // Drag event listeners na RED (drop target)
     row.addEventListener('dragover', handleDragOver);
     row.addEventListener('dragleave', handleDragLeave);
     row.addEventListener('drop', handleDrop);
-    row.addEventListener('dragend', handleDragEnd);
 
     // Click handler na ceo red - selektuje red za ubacivanje
     row.addEventListener("click", (e) => {
@@ -334,11 +338,17 @@ function renderRows() {
       renderRows();
     });
 
-    // Drag handle
+    // Drag handle - SAMO handle je draggable
     const dragHandle = document.createElement("div");
     dragHandle.className = "drag-handle";
     dragHandle.innerHTML = "⋮⋮";
     dragHandle.title = "Prevuci za premeštanje";
+    dragHandle.draggable = true;
+    dragHandle.dataset.id = r.id;
+    
+    // Drag event listeners na HANDLE (drag source)
+    dragHandle.addEventListener('dragstart', handleDragStart);
+    dragHandle.addEventListener('dragend', handleDragEnd);
 
     // Field column
     const fieldCell = document.createElement("div");
