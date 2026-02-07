@@ -1301,14 +1301,28 @@ function renderTemplatesList() {
   const list = el("templatesList");
   if (!list) return;
   
-  if (templates.length === 0) {
-    list.innerHTML = '<div class="empty-state">Nema sačuvanih templata</div>';
+  // Filter po pretrazi
+  const searchInput = el("templateSearch");
+  const query = (searchInput?.value || "").trim().toLowerCase();
+  
+  const visible = query
+    ? templates.filter(t =>
+        (t.name || "").toLowerCase().includes(query) ||
+        (t.desc || "").toLowerCase().includes(query)
+      )
+    : templates;
+  
+  // Prikaz rezultata
+  if (visible.length === 0) {
+    list.innerHTML = query 
+      ? '<div class="empty-state">Nema templata koji odgovaraju pretrazi</div>'
+      : '<div class="empty-state">Nema sačuvanih templata</div>';
     return;
   }
   
   list.innerHTML = "";
   
-  templates.forEach((t) => {
+  visible.forEach((t) => {
     const card = document.createElement("div");
     card.className = "template-card";
     
@@ -1437,6 +1451,14 @@ function openTemplatesModal() {
   const modal = el("modalTemplates");
   if (backdrop) backdrop.classList.remove("hidden");
   if (modal) modal.classList.remove("hidden");
+  
+  // Opciono: osveži svaki put (ako želiš uvek najnovije)
+  // await loadTemplatesFromSharePoint();
+  
+  // Resetuj pretragu
+  const searchInput = el("templateSearch");
+  if (searchInput) searchInput.value = "";
+  
   renderTemplatesList();
 }
 
@@ -1652,6 +1674,24 @@ function bindUi() {
   // Templates modal events
   if (btnModalTemplatesClose) btnModalTemplatesClose.addEventListener("click", closeTemplatesModal);
   if (btnNewTemplate) btnNewTemplate.addEventListener("click", () => openEditTemplateModal(null));
+  
+  // Templates toolbar events
+  const btnRefreshTemplates = el("btnRefreshTemplates");
+  const templateSearch = el("templateSearch");
+  
+  if (btnRefreshTemplates) {
+    btnRefreshTemplates.addEventListener("click", async () => {
+      setStatus("Osvežavam templejte...", "info");
+      await loadTemplatesFromSharePoint();
+      renderTemplatesList();
+    });
+  }
+  
+  if (templateSearch) {
+    templateSearch.addEventListener("input", () => {
+      renderTemplatesList();
+    });
+  }
   
   // Edit template modal events
   if (btnModalEditTemplateClose) btnModalEditTemplateClose.addEventListener("click", closeEditTemplateModal);

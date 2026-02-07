@@ -576,6 +576,26 @@ body {
   max-width: 480px;
 }
 
+/* Templates toolbar */
+.templates-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.templates-toolbar .form-input {
+  flex: 1;
+  margin: 0;
+}
+
+.templates-toolbar .btn-secondary {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Templates list */
 .templates-list {
   display: flex;
@@ -734,5 +754,15 @@ body {
 .form-textarea::placeholder {
   color: #9ca3af;
   font-style: italic;
+}
+
+
+/* Empty state improvement */
+.empty-state::before {
+  content: "🔍";
+  display: block;
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.3;
 }
 

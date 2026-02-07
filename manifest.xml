@@ -10,7 +10,7 @@
   <!-- Datum: 2025-02-07 -->
   <!-- ============================================ -->
 
-  <Id>10118cd9-088f-498a-aae7-05c50d6d258a</Id>
+  <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
   <Version>1.0.0.38</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
@@ -36,18 +36,6 @@
 
   <Permissions>ReadWriteDocument</Permissions>
 
-  <!-- ============================================ -->
-  <!-- GRAPH API SSO (V30 - SharePoint Templates) -->
-  <!-- ============================================ -->
-  <WebApplicationInfo>
-    <Id>10118cd9-088f-498a-aae7-05c50d6d258a</Id>
-    <Resource>https://graph.microsoft.com</Resource>
-    <Scopes>
-      <Scope>Files.Read.All</Scope>
-      <Scope>Sites.Read.All</Scope>
-      <Scope>User.Read</Scope>
-    </Scopes>
-  </WebApplicationInfo>
   <VersionOverrides
     xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
     xsi:type="VersionOverridesV1_0">
@@ -122,5 +110,21 @@
       </bt:LongStrings>
     </Resources>
 
+
+    <!-- ============================================ -->
+    <!-- GRAPH API SSO (V30 - SharePoint Templates) -->
+    <!-- ============================================ -->
+    <WebApplicationInfo>
+      <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
+      <Resource>api://54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Resource>
+      <Scopes>
+        <Scope>profile</Scope>
+        <Scope>openid</Scope>
+        <Scope>Files.Read</Scope>
+        <Scope>Sites.Read.All</Scope>
+        <Scope>offline_access</Scope>
+      </Scopes>
+    </WebApplicationInfo>
   </VersionOverrides>
+
 </OfficeApp>
