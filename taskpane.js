@@ -1,9 +1,10 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V29 (DRAG & DROP)
+// VERZIJA: 2025-02-07 - V29.1 (FIX LAYOUT)
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V29");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V29.1");
+console.log("✅ FIX: Layout spacing - drag handle sada 24px umesto 32px");
 console.log("✅ NOVO: Drag & Drop reordering - prevuci ⋮⋮ handle da promeniš redosled");
 console.log("✅ FIX DELETE: Tekst se umeće VAN CC, pa se CC briše");
 console.log("✅ FIX: Klik na red sada selektuje polje za ubacivanje");
