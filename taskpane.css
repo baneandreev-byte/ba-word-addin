@@ -85,7 +85,7 @@ body {
 /* ========== Table ========== */
 .table-header {
   display: grid;
-  grid-template-columns: 1fr 1fr 48px;
+  grid-template-columns: 32px 1fr 1fr 80px;
   gap: 12px;
   padding: 10px 14px;
   background: #f3f4f6;
@@ -113,7 +113,7 @@ body {
 
 .row {
   display: grid;
-  grid-template-columns: 1fr 1fr 48px;
+  grid-template-columns: 32px 1fr 1fr 80px;
   gap: 12px;
   padding: 10px 14px;
   border-top: 1px solid #e5e7eb;
@@ -490,4 +490,80 @@ body {
   gap: 4px;
   align-items: center;
   justify-content: center;
+}
+/* ========== Drag & Drop (V29) ========== */
+
+/* Drag handle */
+.drag-handle {
+  width: 32px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: #9ca3af;
+  font-size: 20px;
+  user-select: none;
+  transition: all 0.2s;
+  font-weight: bold;
+}
+
+.drag-handle:hover {
+  color: #4b5563;
+  background: #f3f4f6;
+  border-radius: 6px;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Row dragging states */
+.row[draggable="true"] {
+  cursor: move;
+  transition: all 0.2s ease;
+}
+
+.row.dragging {
+  opacity: 0.5;
+  background: #eff6ff;
+  border: 2px dashed #2563eb;
+  transform: scale(0.98);
+}
+
+/* Drop target indicator */
+.row.drag-over {
+  border-top: 3px solid #2563eb !important;
+  background: #eff6ff;
+}
+
+.row.drag-over:first-child {
+  border-top: 3px solid #2563eb !important;
+}
+
+/* Smooth transitions */
+.row:not(.dragging) {
+  transition: transform 0.2s ease, background 0.15s ease;
+}
+
+.row:not(.dragging):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Touch device improvements */
+@media (hover: none) {
+  .drag-handle {
+    color: #6b7280;
+  }
+  
+  .row[draggable="true"] {
+    cursor: default;
+  }
+}
+
+/* Make sure selected row is visible even while dragging */
+.row.selected.dragging {
+  background: #dbeafe;
+  border-color: #3b82f6;
 }

@@ -1,14 +1,19 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V28 (FIX DELETE - FINAL)
+// VERZIJA: 2025-02-07 - V29 (DRAG & DROP)
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V28");
-console.log("✅ FIX DELETE (FINAL): Tekst se umeće VAN CC, pa se CC briše");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V29");
+console.log("✅ NOVO: Drag & Drop reordering - prevuci ⋮⋮ handle da promeniš redosled");
+console.log("✅ FIX DELETE: Tekst se umeće VAN CC, pa se CC briše");
 console.log("✅ FIX: Klik na red sada selektuje polje za ubacivanje");
 
 let rows = [];
 let selectedRowIndex = null;
+
+// Drag & Drop state
+let draggedElement = null;
+let draggedIndex = null;
 
 // Format options per type
 const FORMAT_OPTIONS = {
@@ -191,6 +196,90 @@ function buildValueMap() {
   return map;
 }
 
+// ---------- Drag & Drop handlers ----------
+function handleDragStart(e) {
+  draggedElement = this;
+  draggedIndex = parseInt(this.dataset.index);
+  
+  this.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/html', this.innerHTML);
+}
+
+function handleDragOver(e) {
+  if (e.preventDefault) {
+    e.preventDefault();
+  }
+  
+  e.dataTransfer.dropEffect = 'move';
+  
+  // Visual feedback - show drop indicator
+  const targetRow = e.target.closest('.row');
+  if (targetRow && targetRow !== draggedElement) {
+    // Remove drag-over from all rows first
+    document.querySelectorAll('.row').forEach(r => {
+      if (r !== targetRow) r.classList.remove('drag-over');
+    });
+    targetRow.classList.add('drag-over');
+  }
+  
+  return false;
+}
+
+function handleDragLeave(e) {
+  const targetRow = e.target.closest('.row');
+  if (targetRow) {
+    targetRow.classList.remove('drag-over');
+  }
+}
+
+function handleDrop(e) {
+  if (e.stopPropagation) {
+    e.stopPropagation();
+  }
+  
+  const targetRow = e.target.closest('.row');
+  if (!targetRow || targetRow === draggedElement) {
+    return false;
+  }
+  
+  const targetIndex = parseInt(targetRow.dataset.index);
+  
+  // Reorder rows array
+  const [movedItem] = rows.splice(draggedIndex, 1);
+  rows.splice(targetIndex, 0, movedItem);
+  
+  // Update selected index if needed
+  if (selectedRowIndex === draggedIndex) {
+    selectedRowIndex = targetIndex;
+  } else if (draggedIndex < selectedRowIndex && targetIndex >= selectedRowIndex) {
+    selectedRowIndex--;
+  } else if (draggedIndex > selectedRowIndex && targetIndex <= selectedRowIndex) {
+    selectedRowIndex++;
+  }
+  
+  // Re-render and save
+  renderRows();
+  saveStateToDocument();
+  
+  // Show status
+  setStatus(`Polje "${movedItem.field}" premešteno.`, "info");
+  
+  return false;
+}
+
+function handleDragEnd(e) {
+  this.classList.remove('dragging');
+  
+  // Remove all drag-over classes
+  document.querySelectorAll('.row').forEach(row => {
+    row.classList.remove('drag-over');
+  });
+  
+  draggedElement = null;
+  draggedIndex = null;
+}
+
 // ---------- render rows ----------
 function renderRows() {
   const container = el("rows");
@@ -214,12 +303,31 @@ function renderRows() {
     const row = document.createElement("div");
     row.className = "row";
     if (idx === selectedRowIndex) row.classList.add("selected");
+    
+    // Make row draggable
+    row.draggable = true;
+    row.dataset.index = idx;
+    
+    // Drag event listeners
+    row.addEventListener('dragstart', handleDragStart);
+    row.addEventListener('dragover', handleDragOver);
+    row.addEventListener('dragleave', handleDragLeave);
+    row.addEventListener('drop', handleDrop);
+    row.addEventListener('dragend', handleDragEnd);
 
     // Click handler na ceo red - selektuje red za ubacivanje
-    row.addEventListener("click", () => {
+    row.addEventListener("click", (e) => {
+      // Don't select if clicking drag handle
+      if (e.target.closest('.drag-handle')) return;
       selectedRowIndex = idx;
-      renderRows(); // Re-render da se prikaže selected klasa
+      renderRows();
     });
+
+    // Drag handle
+    const dragHandle = document.createElement("div");
+    dragHandle.className = "drag-handle";
+    dragHandle.innerHTML = "⋮⋮";
+    dragHandle.title = "Prevuci za premeštanje";
 
     // Field column
     const fieldCell = document.createElement("div");
@@ -322,6 +430,7 @@ function renderRows() {
     actionsCell.appendChild(btnEdit);
     actionsCell.appendChild(btnDelete);
 
+    row.appendChild(dragHandle);
     row.appendChild(fieldCell);
     row.appendChild(valueCell);
     row.appendChild(actionsCell);

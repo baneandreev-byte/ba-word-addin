@@ -6,12 +6,12 @@
   xsi:type="TaskPaneApp">
 
   <!-- ============================================ -->
-  <!-- VERZIJA: 1.0.0.28 (V28) - FIX DELETE FINAL -->
+  <!-- VERZIJA: 1.0.0.29 (V29) - DRAG AND DROP -->
   <!-- Datum: 2025-02-07 -->
   <!-- ============================================ -->
 
   <Id>10118cd9-088f-498a-aae7-05c50d6d258a</Id>
-  <Version>1.0.0.28</Version>
+  <Version>1.0.0.29</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
@@ -31,7 +31,7 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V28"/>
+    <SourceLocation DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V29"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -96,7 +96,7 @@
       </bt:Images>
 
       <bt:Urls>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V28"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V29"/>
         <bt:Url id="Commands.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/commands.html"/>
       </bt:Urls>
 
