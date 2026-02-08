@@ -6,12 +6,12 @@
   xsi:type="TaskPaneApp">
 
   <!-- ============================================ -->
-  <!-- VERZIJA: 1.0.0.44 (V44) - SHAREPOINT TEMPLATES -->
-  <!-- Datum: 2025-02-07 -->
+  <!-- VERZIJA: 1.0.0.45 (V45) - DELETE CC COMMAND -->
+  <!-- Datum: 2025-02-08 -->
   <!-- ============================================ -->
 
   <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
-  <Version>1.0.0.44</Version>
+  <Version>1.0.0.45</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
@@ -31,7 +31,7 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V44"/>
+    <SourceLocation DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250208_V45"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -64,6 +64,7 @@
                   <bt:Image size="80" resid="Icon.80"/>
                 </Icon>
 
+                <!-- Task Pane Button -->
                 <Control xsi:type="Button" id="BiroA.Button">
                   <Label resid="BiroA.Button.Label"/>
                   <Supertip>
@@ -77,6 +78,23 @@
                   </Icon>
                   <Action xsi:type="ShowTaskpane">
                     <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+
+                <!-- ⭐ NOVO: Ribbon Command za brisanje svih kontrola -->
+                <Control xsi:type="Button" id="BiroA.DeleteAllButton">
+                  <Label resid="DeleteAll.Label"/>
+                  <Supertip>
+                    <Title resid="DeleteAll.Label"/>
+                    <Description resid="DeleteAll.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16"/>
+                    <bt:Image size="32" resid="Icon.32"/>
+                    <bt:Image size="80" resid="Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>deleteAllContentControls</FunctionName>
                   </Action>
                 </Control>
 
@@ -96,23 +114,25 @@
       </bt:Images>
 
       <bt:Urls>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V44"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250208_V45"/>
         <bt:Url id="Commands.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/commands.html"/>
       </bt:Urls>
 
       <bt:ShortStrings>
         <bt:String id="BiroA.Group.Label" DefaultValue="BiroA"/>
         <bt:String id="BiroA.Button.Label" DefaultValue="BiroA Polja"/>
+        <bt:String id="DeleteAll.Label" DefaultValue="Ukloni Kontrole"/>
       </bt:ShortStrings>
 
       <bt:LongStrings>
         <bt:String id="BiroA.Button.Desc" DefaultValue="Upravljanje pametnim poljima"/>
+        <bt:String id="DeleteAll.Tooltip" DefaultValue="Uklanja sve content control-e iz dokumenta, zadržavajući tekst i brišući XML podatke"/>
       </bt:LongStrings>
     </Resources>
 
 
     <!-- ============================================ -->
-    <!-- GRAPH API SSO (V44 - SharePoint Templates) -->
+    <!-- GRAPH API SSO (V45 - SharePoint Templates) -->
     <!-- ============================================ -->
     <WebApplicationInfo>
       <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>

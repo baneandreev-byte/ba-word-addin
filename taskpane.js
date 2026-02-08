@@ -1,11 +1,11 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V44 (SHAREPOINT TEMPLATES)
+// VERZIJA: 2025-02-08 - V45 (IMPROVED DELETE)
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V44");
-console.log("✅ NOVO: SharePoint templejti - Graph API integracija");
-console.log("✅ SSO pristup SharePoint-u za učitavanje templata");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-08 - V45");
+console.log("✅ NOVO: Poboljšana delete funkcija - jednostavnija logika");
+console.log("✅ SharePoint templejti - Graph API integracija");
 
 let rows = [];
 let selectedRowIndex = null;
@@ -24,11 +24,11 @@ const FORMAT_OPTIONS = {
   ],
   date: [
     { value: "date:auto", label: "Kako je uneto", hint: "" },
-    { value: "date:today", label: "Danas (dd.mm.yyyy)", hint: "Primer: 07.02.2025" },
-    { value: "date:dd.mm.yyyy", label: "dd.mm.yyyy", hint: "Primer: 07.02.2025" },
-    { value: "date:yyyy-mm-dd", label: "yyyy-mm-dd", hint: "Primer: 2025-02-07" },
+    { value: "date:today", label: "Danas (dd.mm.yyyy)", hint: "Primer: 08.02.2025" },
+    { value: "date:dd.mm.yyyy", label: "dd.mm.yyyy", hint: "Primer: 08.02.2025" },
+    { value: "date:yyyy-mm-dd", label: "yyyy-mm-dd", hint: "Primer: 2025-02-08" },
     { value: "date:mmmm.yyyy", label: "MMMM.yyyy", hint: "Primer: februar.2025" },
-    { value: "date:dd.mmmm.yyyy", label: "dd.MMMM.yyyy", hint: "Primer: 07.februar.2025" },
+    { value: "date:dd.mmmm.yyyy", label: "dd.MMMM.yyyy", hint: "Primer: 08.februar.2025" },
   ],
   number: [
     { value: "number:auto", label: "Automatski", hint: "" },
@@ -801,18 +801,21 @@ async function clearFieldsKeepControls() {
 }
 
 // ============================================
-// FIX: deleteControlsAndXml - Custom Modal umesto confirm()
+// ⭐ V45 - IMPROVED DELETE FUNCTION
 // ============================================
 async function deleteControlsAndXml() {
   // Prikaži custom confirm modal
   showDeleteConfirmModal();
 }
 
+/**
+ * ⭐ POBOLJŠANA VERZIJA - Jednostavnija i bezbednija
+ * Koristi cc.delete(false) direktno umesto kompleksnog insertText pristupa
+ */
 async function performDelete() {
   try {
     console.log("🔴 Počinjem brisanje content controls...");
     
-    const map = buildValueMap();
     let removed = 0;
 
     await Word.run(async (context) => {
@@ -820,54 +823,69 @@ async function performDelete() {
       ccs.load("items");
       await context.sync();
 
-      console.log(`  Pronađeno ${ccs.items.length} content controls`);
+      console.log(`📊 Pronađeno ${ccs.items.length} content controls`);
 
-      // Učitaj sve potrebne properties
+      if (ccs.items.length === 0) {
+        console.log("ℹ️ Nema content control-a za brisanje");
+        setStatus("Nema polja za brisanje.", "info");
+        closeDeleteModal();
+        return;
+      }
+
+      // FAZA 1: Učitaj properties za sve kontrole
       for (const cc of ccs.items) {
-        cc.load("tag,text");
+        cc.load("tag,text,cannotDelete");
       }
       await context.sync();
+      console.log("✅ Properties učitane");
 
-      // Prvo prolaz: zameni svaki CC sa plain text-om
-      const toDelete = [];
-      for (const cc of ccs.items) {
+      // FAZA 2: Obriši BA_FIELD kontrole - iteracija unazad
+      for (let i = ccs.items.length - 1; i >= 0; i--) {
+        const cc = ccs.items[i];
         const meta = parseTag(cc.tag || "");
-        if (!meta) continue;
-
-        console.log(`  - Obrađujem CC za polje: ${meta.key}`);
-
-        // Uzmi formatirani tekst ili trenutni tekst u CC-u
-        const finalText = map.get(meta.key)?.formatted ?? cc.text;
         
-        // Umetni plain text NAKON content control-a
-        const range = cc.getRange(Word.RangeLocation.after);
-        range.insertText(finalText, Word.InsertLocation.start);
-        
-        // Označi CC za brisanje
-        toDelete.push(cc);
-        removed++;
-      }
-
-      await context.sync();
-      console.log(`  Umetnut tekst za ${removed} polja`);
-
-      // Drugi prolaz: obriši sve CC-ove BEZ sadržaja (text je već van CC-a)
-      for (const cc of toDelete) {
-        try {
-          cc.delete(false); // false jer smo vec izvukli text
-        } catch (e) {
-          console.error("  Greška pri brisanju:", e);
+        // Preskači ako nije BA_FIELD
+        if (!meta) {
+          console.log(`  ⏭️ [${i}] Preskačem: nije BA_FIELD`);
+          continue;
         }
+
+        console.log(`  🔍 [${i}] Procesiranje: ${meta.key}`);
+
+        // Otključaj ako je zaključana
+        if (cc.cannotDelete) {
+          console.log(`    🔓 Otključavanje kontrole`);
+          cc.cannotDelete = false;
+        }
+
+        const currentText = cc.text || "";
+        console.log(`    📝 Tekst: "${currentText}"`);
+
+        // ⭐ KRITIČNA LINIJA: delete(false) = zadrži tekst
+        // Ova metoda automatski zadržava formatiranje i poziciju teksta
+        cc.delete(false);
+        removed++;
+        
+        console.log(`    ✅ Kontrola obrisana (tekst zadržan)`);
       }
 
       await context.sync();
+      console.log(`✅ Obrisano ${removed} kontrola`);
     });
 
-    console.log(`✅ Uklonjeno ${removed} content controls`);
+    if (removed === 0) {
+      setStatus("Nema BiroA polja za brisanje.", "info");
+      closeDeleteModal();
+      return;
+    }
 
     // Obriši XML state
-    await deleteSavedStateFromDocument();
-    console.log("✅ XML state obrisan");
+    try {
+      await deleteSavedStateFromDocument();
+      console.log("✅ XML state obrisan");
+    } catch (error) {
+      console.warn("⚠️ XML state greška (nije kritično):", error);
+    }
 
     // Očisti lokalne podatke
     rows = [];
@@ -875,9 +893,13 @@ async function performDelete() {
     renderRows();
 
     setStatus(`Dokument očišćen: ${removed} polja uklonjeno, plugin podaci obrisani.`, "info");
+    closeDeleteModal();
+    
   } catch (error) {
     console.error("❌ GREŠKA pri brisanju:", error);
+    console.error("❌ Stack:", error.stack);
     setStatus("Greška pri brisanju polja. Vidi konzolu.", "error");
+    closeDeleteModal();
   }
 }
 
@@ -1246,11 +1268,12 @@ async function loadTemplatesFromDocument() {
           const fields = [];
           
           if (fieldsNode) {
-            fieldsNode.querySelectorAll("field").forEach((f) => {
+            const fieldNodes = fieldsNode.querySelectorAll("field");
+            fieldNodes.forEach((fn) => {
               fields.push({
-                field: f.getAttribute("field") || "",
-                type: f.getAttribute("type") || "text",
-                format: f.getAttribute("format") || "text:auto",
+                field: fn.getAttribute("name") || "",
+                type: fn.getAttribute("type") || "text",
+                format: fn.getAttribute("format") || "text:auto",
               });
             });
           }
@@ -1258,234 +1281,128 @@ async function loadTemplatesFromDocument() {
           templates.push({ id, name, desc, fields });
         });
         
-        console.log("✅ Učitano", templates.length, "templata");
-      } else {
-        console.log("ℹ️ Nema sačuvanih templata");
-        templates = [];
+        console.log("✅ Učitano", templates.length, "lokalnih templata");
       }
     });
-  } catch (err) {
-    console.error("Greška pri učitavanju templata:", err);
-    templates = [];
+  } catch (error) {
+    console.error("❌ Greška pri učitavanju lokalnih templata:", error);
   }
 }
 
-// Sačuvaj templejte u XML
+// Sačuvaj templejte u dokument (fallback za lokalno čuvanje)
 async function saveTemplatesToDocument() {
   try {
     await Word.run(async (context) => {
+      const targetNamespace = "http://biroa.com/word-addin/templates";
       const parts = context.document.customXmlParts;
       parts.load("items");
       await context.sync();
 
-      const targetNamespace = "http://biroa.com/word-addin/templates";
-      const targetParts = parts.items.filter(
-        (p) => p.namespaceUri === targetNamespace
-      );
-
-      targetParts.forEach((p) => p.delete());
-      await context.sync();
-
-      let xml = `<?xml version="1.0" encoding="UTF-8"?><root xmlns="${targetNamespace}">`;
-      
-      templates.forEach((t) => {
-        xml += `<template id="${t.id}" name="${escapeXml(t.name)}" description="${escapeXml(t.desc || '')}">`;
-        xml += `<fields>`;
-        t.fields.forEach((f) => {
-          xml += `<field field="${escapeXml(f.field)}" type="${f.type}" format="${f.format}" />`;
-        });
-        xml += `</fields></template>`;
-      });
-      
-      xml += `</root>`;
-      
-      parts.add(xml);
-      await context.sync();
-      
-      console.log("✅ Sačuvano", templates.length, "templata");
-    });
-  } catch (err) {
-    console.error("Greška pri čuvanju templata:", err);
-    setStatus("Greška pri čuvanju templata", "error");
-  }
-}
-
-function escapeXml(s) {
-  return String(s || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
-// Prikaz liste templata
-function renderTemplatesList() {
-  const list = el("templatesList");
-  if (!list) return;
-  
-  // Filter po pretrazi
-  const searchInput = el("templateSearch");
-  const query = (searchInput?.value || "").trim().toLowerCase();
-  
-  const visible = query
-    ? templates.filter(t =>
-        (t.name || "").toLowerCase().includes(query) ||
-        (t.desc || "").toLowerCase().includes(query)
-      )
-    : templates;
-  
-  // Prikaz rezultata
-  if (visible.length === 0) {
-    list.innerHTML = query 
-      ? '<div class="empty-state">Nema templata koji odgovaraju pretrazi</div>'
-      : '<div class="empty-state">Nema sačuvanih templata</div>';
-    return;
-  }
-  
-  list.innerHTML = "";
-  
-  visible.forEach((t) => {
-    const card = document.createElement("div");
-    card.className = "template-card";
-    
-    const header = document.createElement("div");
-    header.className = "template-card-header";
-    
-    const title = document.createElement("h4");
-    title.className = "template-card-title";
-    title.textContent = t.name;
-    header.appendChild(title);
-    
-    const actions = document.createElement("div");
-    actions.className = "template-card-actions";
-    
-    const btnLoad = document.createElement("button");
-    btnLoad.className = "template-card-btn";
-    btnLoad.innerHTML = "📥";
-    btnLoad.title = "Učitaj templejt";
-    btnLoad.addEventListener("click", (e) => {
-      e.stopPropagation();
-      loadTemplate(t.id);
-    });
-    
-    const btnEdit = document.createElement("button");
-    btnEdit.className = "template-card-btn";
-    btnEdit.innerHTML = "✏️";
-    btnEdit.title = "Izmeni";
-    btnEdit.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openEditTemplateModal(t.id);
-    });
-    
-    const btnDelete = document.createElement("button");
-    btnDelete.className = "template-card-btn delete";
-    btnDelete.innerHTML = "🗑️";
-    btnDelete.title = "Obriši";
-    btnDelete.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      if (confirm(`Da li želiš da obrišeš templejt "${t.name}"?`)) {
-        await deleteTemplate(t.id);
+      // Obriši stare templejte
+      for (const p of parts.items) {
+        p.load("namespaceUri");
       }
+      await context.sync();
+      
+      for (const p of parts.items) {
+        if (p.namespaceUri === targetNamespace) p.delete();
+      }
+      await context.sync();
+
+      // Kreiraj novi XML
+      let xml = `<templates xmlns="${targetNamespace}">`;
+      templates.forEach((t) => {
+        const nameEsc = xmlEscape(t.name);
+        const descEsc = xmlEscape(t.desc || "");
+        xml += `<template id="${t.id}" name="${nameEsc}" description="${descEsc}">`;
+        xml += `<fields>`;
+        (t.fields || []).forEach((f) => {
+          const fNameEsc = xmlEscape(f.field);
+          const fTypeEsc = xmlEscape(f.type || "text");
+          const fFormatEsc = xmlEscape(f.format || "text:auto");
+          xml += `<field name="${fNameEsc}" type="${fTypeEsc}" format="${fFormatEsc}"/>`;
+        });
+        xml += `</fields>`;
+        xml += `</template>`;
+      });
+      xml += `</templates>`;
+
+      context.document.customXmlParts.add(xml);
+      await context.sync();
+      
+      console.log("✅ Templejti sačuvani lokalno");
     });
-    
-    actions.appendChild(btnLoad);
-    actions.appendChild(btnEdit);
-    actions.appendChild(btnDelete);
-    header.appendChild(actions);
-    card.appendChild(header);
-    
-    if (t.desc) {
-      const desc = document.createElement("div");
-      desc.className = "template-card-desc";
-      desc.textContent = t.desc;
-      card.appendChild(desc);
-    }
-    
-    const meta = document.createElement("div");
-    meta.className = "template-card-meta";
-    
-    const fieldsInfo = document.createElement("span");
-    fieldsInfo.className = "template-card-fields";
-    fieldsInfo.textContent = `${t.fields.length} ${t.fields.length === 1 ? 'polje' : t.fields.length < 5 ? 'polja' : 'polja'}`;
-    meta.appendChild(fieldsInfo);
-    
-    card.appendChild(meta);
-    
-    card.addEventListener("click", () => {
-      loadTemplate(t.id);
-    });
-    
-    list.appendChild(card);
-  });
+  } catch (error) {
+    console.error("❌ Greška pri čuvanju templata:", error);
+  }
 }
 
-// Učitaj templejt u tabelu
-async function loadTemplate(templateId) {
+// Primeni templejt - postavi rows iz templata
+async function applyTemplate(templateId) {
   const template = templates.find((t) => t.id === templateId);
   if (!template) return;
   
   try {
-    setStatus(`Učitavam templejt: ${template.name}...`, "info");
+    setStatus(`Učitavam templejt "${template.name}"...`, "info");
     
-    // If template is from SharePoint and fields not loaded yet
-    if (template.fileId && template.fields.length === 0) {
-      console.log("📥 Skidam fajl sa SharePointa:", template.name);
-      
+    // If it's a SharePoint template and fields are not loaded yet
+    if (template.fileId && (!template.fields || template.fields.length === 0)) {
       const arrayBuffer = await downloadFileContent(template.fileId);
       template.fields = await extractFieldsFromDocx(arrayBuffer);
-      
-      if (template.fields.length === 0) {
-        setStatus("Templejt nema polja ili nisu pronađena", "error");
-        return;
-      }
     }
     
-    // Load fields into table
+    if (!template.fields || template.fields.length === 0) {
+      setStatus("Templejt nema polja", "error");
+      return;
+    }
+    
+    // Set rows
     rows = template.fields.map((f) => ({
       id: crypto.randomUUID(),
       field: f.field,
       value: "",
-      type: f.type,
-      format: f.format,
+      type: f.type || "text",
+      format: f.format || "text:auto",
     }));
     
+    selectedRowIndex = null;
     renderRows();
     await saveStateToDocument();
+    
+    setStatus(`Učitan templejt "${template.name}" (${rows.length} polja)`, "success");
     closeTemplatesModal();
-    setStatus(`Učitan templejt: ${template.name} (${template.fields.length} polja)`, "success");
   } catch (error) {
-    console.error("❌ Greška pri učitavanju templata:", error);
+    console.error("❌ Greška pri primeni templata:", error);
     setStatus("Greška pri učitavanju templata", "error");
   }
 }
 
 // Obriši templejt
 async function deleteTemplate(templateId) {
+  const template = templates.find((t) => t.id === templateId);
+  if (!template) return;
+  
+  if (!confirm(`Obrisati templejt "${template.name}"?`)) return;
+  
   templates = templates.filter((t) => t.id !== templateId);
   await saveTemplatesToDocument();
+  setStatus(`Templejt "${template.name}" obrisan`, "success");
   renderTemplatesList();
-  setStatus("Templejt obrisan", "success");
 }
 
-// Otvori modal za templejte
+// Otvori modal sa templatejima
 function openTemplatesModal() {
   const backdrop = el("modalTemplatesBackdrop");
   const modal = el("modalTemplates");
-  if (backdrop) backdrop.classList.remove("hidden");
-  if (modal) modal.classList.remove("hidden");
+  if (!backdrop || !modal) return;
   
-  // Opciono: osveži svaki put (ako želiš uvek najnovije)
-  // await loadTemplatesFromSharePoint();
-  
-  // Resetuj pretragu
-  const searchInput = el("templateSearch");
-  if (searchInput) searchInput.value = "";
+  backdrop.classList.remove("hidden");
+  modal.classList.remove("hidden");
   
   renderTemplatesList();
 }
 
-// Zatvori modal za templejte
+// Zatvori modal sa templatejima
 function closeTemplatesModal() {
   const backdrop = el("modalTemplatesBackdrop");
   const modal = el("modalTemplates");
@@ -1493,10 +1410,106 @@ function closeTemplatesModal() {
   if (modal) modal.classList.add("hidden");
 }
 
-// Otvori modal za editovanje templata
-function openEditTemplateModal(templateId = null) {
-  editingTemplateId = templateId;
+// Renderuj listu templata
+function renderTemplatesList() {
+  const container = el("templatesList");
+  const searchInput = el("templateSearch");
+  if (!container) return;
   
+  const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : "";
+  
+  // Filter templates
+  const filtered = templates.filter((t) => {
+    if (!searchTerm) return true;
+    return (
+      t.name.toLowerCase().includes(searchTerm) ||
+      (t.desc && t.desc.toLowerCase().includes(searchTerm))
+    );
+  });
+  
+  container.innerHTML = "";
+  
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="empty-state">Nema templata</div>';
+    return;
+  }
+  
+  filtered.forEach((template) => {
+    const card = document.createElement("div");
+    card.className = "template-card";
+    
+    // Header
+    const header = document.createElement("div");
+    header.className = "template-card-header";
+    
+    const title = document.createElement("h4");
+    title.className = "template-card-title";
+    title.textContent = template.name;
+    
+    const actions = document.createElement("div");
+    actions.className = "template-card-actions";
+    
+    // Edit button (only for local templates)
+    if (!template.fileId) {
+      const btnEdit = document.createElement("button");
+      btnEdit.className = "template-card-btn";
+      btnEdit.innerHTML = "✎";
+      btnEdit.title = "Izmeni";
+      btnEdit.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openEditTemplateModal(template.id);
+      });
+      actions.appendChild(btnEdit);
+    }
+    
+    // Delete button (only for local templates)
+    if (!template.fileId) {
+      const btnDelete = document.createElement("button");
+      btnDelete.className = "template-card-btn delete";
+      btnDelete.innerHTML = "🗑️";
+      btnDelete.title = "Obriši";
+      btnDelete.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteTemplate(template.id);
+      });
+      actions.appendChild(btnDelete);
+    }
+    
+    header.appendChild(title);
+    header.appendChild(actions);
+    
+    // Description
+    const desc = document.createElement("div");
+    desc.className = "template-card-desc";
+    desc.textContent = template.desc || "(bez opisa)";
+    
+    // Meta
+    const meta = document.createElement("div");
+    meta.className = "template-card-meta";
+    
+    const fieldsCount = document.createElement("span");
+    fieldsCount.className = "template-card-fields";
+    fieldsCount.textContent = template.fields ? 
+      `${template.fields.length} polja` : 
+      (template.fileId ? "SharePoint dokument" : "0 polja");
+    
+    meta.appendChild(fieldsCount);
+    
+    // Click handler
+    card.addEventListener("click", () => {
+      applyTemplate(template.id);
+    });
+    
+    card.appendChild(header);
+    card.appendChild(desc);
+    card.appendChild(meta);
+    
+    container.appendChild(card);
+  });
+}
+
+// Otvori modal za editovanje templata
+function openEditTemplateModal(templateId) {
   const backdrop = el("modalEditTemplateBackdrop");
   const modal = el("modalEditTemplate");
   const title = el("editTemplateTitle");
@@ -1506,8 +1519,10 @@ function openEditTemplateModal(templateId = null) {
   
   if (!backdrop || !modal) return;
   
+  editingTemplateId = templateId;
+  
   if (templateId) {
-    // Editing existing
+    // Editing existing template
     const template = templates.find((t) => t.id === templateId);
     if (!template) return;
     
@@ -1518,7 +1533,7 @@ function openEditTemplateModal(templateId = null) {
     // Show template fields
     if (fieldsList) {
       fieldsList.innerHTML = "";
-      if (template.fields.length === 0) {
+      if (!template.fields || template.fields.length === 0) {
         fieldsList.classList.add("empty");
         fieldsList.textContent = "Nema polja";
       } else {
@@ -1689,7 +1704,6 @@ function bindUi() {
   if (btnDeleteCancel) btnDeleteCancel.addEventListener("click", closeDeleteModal);
   if (btnDeleteConfirm) {
     btnDeleteConfirm.addEventListener("click", async () => {
-      closeDeleteModal();
       await performDelete();
     });
   }
