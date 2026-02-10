@@ -1,11 +1,12 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-08 - V45 (RIBBON COMMANDS)
+// VERZIJA: 2025-02-10 - V47 (WITH CONFIRMATION)
 // commands.js - Ribbon Command Functions
 // ============================================
-console.log("🔧 BA Word Add-in Commands VERZIJA: 2025-02-08 - V45");
-console.log("✅ Ribbon Command za brisanje content controls");
+console.log("🔧 BA Word Add-in Commands VERZIJA: 2025-02-10 - V47");
+console.log("✅ SA CONFIRMATION DIALOG-OM");
+console.log("✅ Detaljno mapiranje pre brisanja");
 
 /**
  * Parse BA_FIELD tag to extract metadata
@@ -13,14 +14,23 @@ console.log("✅ Ribbon Command za brisanje content controls");
  */
 function parseTag(tag) {
   const s = String(tag || "");
-  if (!s.startsWith("BA_FIELD|")) return null;
+  
+  if (!s.startsWith("BA_FIELD|")) {
+    return null;
+  }
+  
   const parts = s.split("|").slice(1);
   const out = {};
+  
   for (const p of parts) {
     const [k, ...rest] = p.split("=");
     out[k] = rest.join("=");
   }
-  if (!out.key) return null;
+  
+  if (!out.key) {
+    return null;
+  }
+  
   return {
     key: out.key,
     type: out.type || "text",
@@ -59,205 +69,273 @@ async function deleteXMLState(context) {
     }
   } catch (error) {
     console.error("⚠️ Greška pri brisanju XML state:", error);
-    // Ne throw-uj grešku - XML state nije kritičan
   }
 }
 
 /**
- * ⭐ Glavna funkcija - Briše sve BA_FIELD content control-e iz dokumenta
- * Zadržava tekst, briše kontrole i XML state
- * POZIVA SE IZ RIBBON COMMAND DUGMETA
+ * 📋 FAZA 1: Mapiranje svih kontrola u dokumentu
+ * Analizira kontrole i vraća podatke za confirmation dialog
+ */
+async function mapContentControls() {
+  console.log("🔄 FAZA 1: Mapiranje content controls...");
+  console.log("=".repeat(60));
+  
+  const mappedControls = [];
+  let totalControls = 0;
+  let skippedControls = 0;
+
+  await Word.run(async (context) => {
+    const contentControls = context.document.contentControls;
+    contentControls.load("items");
+    await context.sync();
+
+    totalControls = contentControls.items.length;
+    console.log(`📊 Pronađeno ${totalControls} content controls u dokumentu`);
+
+    if (totalControls === 0) {
+      console.log("ℹ️ Nema content control-a");
+      return;
+    }
+
+    // Učitaj properties za sve kontrole
+    for (const cc of contentControls.items) {
+      cc.load("tag,text,title");
+    }
+    await context.sync();
+    console.log("✅ Properties učitane");
+
+    // Analiziraj sve kontrole
+    console.log("\n📋 Detaljno mapiranje:\n" + "-".repeat(60));
+    
+    for (let i = 0; i < contentControls.items.length; i++) {
+      const cc = contentControls.items[i];
+      const tag = cc.tag || "";
+      const title = cc.title || "(bez naslova)";
+      const text = cc.text || "";
+      
+      console.log(`\n[${i}] Kontrola:`);
+      console.log(`    Title: "${title}"`);
+      console.log(`    Tag: "${tag}"`);
+      console.log(`    Text: "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}"`);
+      
+      const meta = parseTag(tag);
+      
+      if (!meta) {
+        console.log(`    ⏭️ PRESKAČEM - nije BA_FIELD`);
+        skippedControls++;
+        continue;
+      }
+      
+      console.log(`    ✅ MAPIRAN - BA_FIELD kontrola`);
+      console.log(`    📝 Tekst koji će biti zadržan: "${text}"`);
+      
+      // Dodaj u listu za brisanje
+      mappedControls.push({
+        index: i,
+        key: meta.key,
+        type: meta.type,
+        format: meta.format,
+        text: text,
+        title: title
+      });
+    }
+
+    console.log("-".repeat(60));
+    console.log(`\n📊 Rezime mapiranja:`);
+    console.log(`   Total kontrola: ${totalControls}`);
+    console.log(`   BA_FIELD kontrola: ${mappedControls.length}`);
+    console.log(`   Preskočeno: ${skippedControls}`);
+    console.log("=".repeat(60));
+  });
+
+  return {
+    controls: mappedControls,
+    total: totalControls,
+    skipped: skippedControls
+  };
+}
+
+/**
+ * 🗑️ FAZA 2: Brisanje kontrola nakon potvrde
+ * Prima listu kontrola iz mapiranja i briše ih
+ */
+async function deleteControlsByIndices(controlIndices) {
+  console.log("\n🔄 FAZA 2: Brisanje potvđenih kontrola...");
+  console.log("=".repeat(60));
+  
+  let removed = 0;
+
+  await Word.run(async (context) => {
+    const contentControls = context.document.contentControls;
+    contentControls.load("items");
+    await context.sync();
+
+    // Učitaj properties
+    for (const cc of contentControls.items) {
+      cc.load("tag,text,cannotDelete");
+    }
+    await context.sync();
+
+    console.log(`🗑️ Brišem ${controlIndices.length} kontrola...\n`);
+
+    // Briši unazad (stabilniji pristup)
+    for (let i = controlIndices.length - 1; i >= 0; i--) {
+      const idx = controlIndices[i];
+      
+      if (idx >= contentControls.items.length) {
+        console.log(`⚠️ [${idx}] Indeks van opsega, preskačem`);
+        continue;
+      }
+
+      const cc = contentControls.items[idx];
+      const currentText = cc.text || "";
+      const tag = cc.tag || "";
+      const meta = parseTag(tag);
+
+      if (!meta) {
+        console.log(`⚠️ [${idx}] Kontrola više nije BA_FIELD, preskačem`);
+        continue;
+      }
+
+      console.log(`🗑️ [${idx}] Brišem: ${meta.key}`);
+      console.log(`    Tekst pre brisanja: "${currentText.substring(0, 60)}..."`);
+
+      // Otključaj ako je zaključana
+      if (cc.cannotDelete) {
+        console.log(`    🔓 Otključavam kontrolu`);
+        cc.cannotDelete = false;
+      }
+
+      // ⭐ KLJUČNA AKCIJA: Briši kontrolu, ZADRŽI TEKST
+      cc.delete(false);
+      removed++;
+      
+      console.log(`    ✅ Kontrola obrisana, tekst zadržan na istom mestu`);
+    }
+
+    await context.sync();
+    console.log(`\n✅ Ukupno obrisano: ${removed} kontrola`);
+
+    // Obriši XML state
+    console.log("\n🔄 Brisanje XML state...");
+    await deleteXMLState(context);
+  });
+
+  console.log("=".repeat(60));
+  return removed;
+}
+
+/**
+ * 🎯 GLAVNA FUNKCIJA - Entry point za Ribbon Command
+ * Poziva se kada korisnik klikne dugme "Ukloni Kontrole"
  */
 async function deleteAllContentControls(event) {
-  console.log("🔴 deleteAllContentControls() pozvana iz Ribbon Command");
+  console.log("\n🔴 deleteAllContentControls() pozvana iz Ribbon Command");
+  console.log("⏰ Vreme: " + new Date().toLocaleTimeString());
   
   try {
-    let removed = 0;
-    let xmlDeleted = false;
-
-    await Word.run(async (context) => {
-      const contentControls = context.document.contentControls;
-      contentControls.load("items");
-      await context.sync();
-
-      const totalControls = contentControls.items.length;
-      console.log(`📊 Pronađeno ${totalControls} content controls u dokumentu`);
-
-      if (totalControls === 0) {
-        console.log("ℹ️ Nema content control-a za brisanje");
-        event.completed();
-        return;
-      }
-
-      // FAZA 1: Učitaj properties za sve kontrole
-      for (const cc of contentControls.items) {
-        cc.load("tag,text,cannotDelete");
-      }
-      await context.sync();
-      console.log("✅ Učitane properties za sve kontrole");
-
-      // FAZA 2: Procesuj samo BA_FIELD kontrole - unazad
-      const toDelete = [];
-      
-      for (let i = contentControls.items.length - 1; i >= 0; i--) {
-        const cc = contentControls.items[i];
-        const meta = parseTag(cc.tag || "");
-        
-        // Preskači ako nije BA_FIELD
-        if (!meta) {
-          console.log(`⏭️ Preskačem kontrolu [${i}]: nije BA_FIELD format`);
-          continue;
-        }
-
-        console.log(`🔍 Procesiranje kontrole [${i}]: ${meta.key}`);
-
-        // Otključaj ako je zaključana
-        if (cc.cannotDelete) {
-          console.log(`  🔓 Otključavanje kontrole: ${meta.key}`);
-          cc.cannotDelete = false;
-        }
-
-        // Sačuvaj tekst
-        const currentText = cc.text || "";
-        console.log(`  📝 Tekst u kontroli: "${currentText}"`);
-
-        // ⭐ KRITIČNA AKCIJA: Obriši kontrolu, ZADRŽI TEKST
-        // delete(false) = zadrži sadržaj u dokumentu
-        cc.delete(false);
-        toDelete.push(meta.key);
-        removed++;
-        
-        console.log(`  ✅ Kontrola "${meta.key}" obrisana (tekst zadržan)`);
-      }
-
-      await context.sync();
-      console.log(`✅ Obrisano ${removed} BA_FIELD kontrola`);
-
-      // FAZA 3: Obriši XML state ako postoji
-      await deleteXMLState(context);
-      xmlDeleted = true;
-    });
-
-    // Prikaži rezultat korisniku
-    if (removed > 0) {
-      const message = xmlDeleted 
-        ? `Uklonjeno ${removed} kontrola. Tekst sačuvan, plugin podaci obrisani.`
-        : `Uklonjeno ${removed} kontrola. Tekst sačuvan.`;
-      
-      console.log(`✨ ${message}`);
-      
-      // Notification preko Office.ui
-      showRibbonNotification(
-        "Uspešno", 
-        message
-      );
-    } else {
-      console.log("ℹ️ Nisu pronađene BA_FIELD kontrole");
-      showRibbonNotification(
-        "Info", 
-        "Nisu pronađene BiroA kontrole u dokumentu."
-      );
-    }
-
-  } catch (error) {
-    console.error("❌ Greška pri brisanju content control-a:", error);
-    console.error("❌ Stack:", error.stack);
+    // FAZA 1: Mapiranje kontrola
+    const mapping = await mapContentControls();
     
-    showRibbonNotification(
-      "Greška", 
-      `Došlo je do greške: ${error.message}`
-    );
-  }
-
-  // ⚠️ OBAVEZNO za ExecuteFunction akcije
-  event.completed();
-}
-
-/**
- * Prikaz notifikacije korisniku
- * Koristi Office.addin.showAsTaskpane() ili message bar
- */
-function showRibbonNotification(title, message) {
-  try {
-    // Office.addin API za notifikacije (Office 2016+)
-    if (Office.context.ui && Office.context.ui.displayDialogAsync) {
-      // Prikaži kao info bar u dokumentu
-      console.log(`📢 ${title}: ${message}`);
-      
-      // Alternativno: Možemo koristiti dialog za bolje iskustvo
-      // Ali za sada samo logujemo - Office.addin.showAsTaskpane zahteva HTML
-    } else {
-      // Fallback - samo console log
-      console.log(`📢 ${title}: ${message}`);
-    }
-  } catch (error) {
-    console.error("⚠️ Greška pri prikazu notifikacije:", error);
-  }
-}
-
-/**
- * ⭐ NAPREDNA VERZIJA - Sa confirmation dijalogom
- * Može se implementirati kasnije ako je potrebno
- */
-async function deleteContentControlsWithConfirm(event) {
-  try {
-    // Prvo proveri koliko ima kontrola
-    let controlCount = 0;
-    await Word.run(async (context) => {
-      const contentControls = context.document.contentControls;
-      contentControls.load("items");
-      await context.sync();
-      
-      for (const cc of contentControls.items) {
-        cc.load("tag");
-      }
-      await context.sync();
-      
-      // Prebroj samo BA_FIELD kontrole
-      for (const cc of contentControls.items) {
-        if (parseTag(cc.tag)) {
-          controlCount++;
-        }
-      }
-    });
-    
-    if (controlCount === 0) {
-      showRibbonNotification("Info", "Nema BiroA kontrola za brisanje");
+    if (mapping.controls.length === 0) {
+      console.log("ℹ️ Nema BA_FIELD kontrola za brisanje");
+      showNotification("Info", "Nisu pronađena aktivna polja u dokumentu.");
       event.completed();
       return;
     }
+
+    // Pripremi podatke za dialog
+    const dialogData = mapping.controls.map(ctrl => ({
+      key: ctrl.key,
+      text: ctrl.text,
+      type: ctrl.type
+    }));
+
+    console.log(`\n💬 Prikazujem confirmation dialog sa ${dialogData.length} polja...`);
+
+    // Prikaži confirmation dialog
+    const dialogUrl = `https://baneandreev-byte.github.io/ba-word-addin/confirm-delete.html?controls=${encodeURIComponent(JSON.stringify(dialogData))}`;
     
-    // Otvori confirmation dialog
     Office.context.ui.displayDialogAsync(
-      'https://baneandreev-byte.github.io/ba-word-addin/confirm-delete.html?count=' + controlCount,
-      { height: 30, width: 40 },
+      dialogUrl,
+      { 
+        height: 60, 
+        width: 45,
+        displayInIframe: false 
+      },
       (result) => {
-        if (result.status === Office.AsyncResultStatus.Succeeded) {
-          const dialog = result.value;
+        if (result.status === Office.AsyncResultStatus.Failed) {
+          console.error("❌ Greška pri otvaranju dijaloga:", result.error);
+          showNotification("Greška", "Nije moguće otvoriti prozor za potvrdu.");
+          event.completed();
+          return;
+        }
+
+        const dialog = result.value;
+        console.log("✅ Confirmation dialog otvoren");
+
+        // Čekaj odgovor od dijaloga
+        dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (arg) => {
+          console.log("📨 Primljen odgovor od dijaloga:", arg.message);
           
-          dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (arg) => {
+          try {
             const response = JSON.parse(arg.message);
             
+            dialog.close();
+            console.log("🔒 Dialog zatvoren");
+
             if (response.confirmed) {
-              // Korisnik je potvrdio - pozovi glavnu funkciju
-              await deleteAllContentControls(event);
+              console.log("✅ Korisnik potvrdio brisanje\n");
+              
+              // FAZA 2: Izvršavanje brisanja
+              const controlIndices = mapping.controls.map(c => c.index);
+              const removed = await deleteControlsByIndices(controlIndices);
+              
+              if (removed > 0) {
+                const message = `Uklonjeno ${removed} aktivnih polja. Tekst zadržan u dokumentu.`;
+                console.log(`\n✨ ${message}`);
+                showNotification("Uspešno", message);
+              }
             } else {
-              console.log("ℹ️ Korisnik je otkazao brisanje");
-              event.completed();
+              console.log("❌ Korisnik otkazao brisanje");
+              showNotification("Info", "Brisanje otkazano.");
             }
             
-            dialog.close();
-          });
-        } else {
-          console.error("❌ Greška pri otvaranju dijaloga:", result.error);
+            event.completed();
+            console.log("✅ Operacija završena\n");
+            
+          } catch (error) {
+            console.error("❌ Greška pri obradi odgovora:", error);
+            event.completed();
+          }
+        });
+
+        // Handle dialog close
+        dialog.addEventHandler(Office.EventType.DialogEventReceived, (arg) => {
+          console.log("🔒 Dialog zatvoren (event):", arg.error);
+          if (arg.error === 12006) {
+            // User closed dialog
+            console.log("ℹ️ Korisnik zatvorio dialog");
+            showNotification("Info", "Brisanje otkazano.");
+          }
           event.completed();
-        }
+        });
       }
     );
+
   } catch (error) {
-    console.error("❌ Greška:", error);
+    console.error("❌ GREŠKA:", error);
+    console.error("❌ Stack:", error.stack);
+    showNotification("Greška", `Došlo je do greške: ${error.message}`);
     event.completed();
   }
+}
+
+/**
+ * Prikaži notifikaciju korisniku (fallback - samo console log)
+ */
+function showNotification(title, message) {
+  console.log(`📢 ${title}: ${message}`);
 }
 
 // ============================================
@@ -265,12 +343,15 @@ async function deleteContentControlsWithConfirm(event) {
 // ============================================
 Office.onReady((info) => {
   if (info.host === Office.HostType.Word) {
-    console.log("✅ Commands.js loaded - Word detected");
+    console.log("✅ Commands.js V47 loaded - Word detected");
+    console.log("✅ Confirmation dialog implementiran");
+    console.log("✅ Detaljno mapiranje pre brisanja");
     
     // Registruj funkcije za Ribbon Commands
     Office.actions.associate("deleteAllContentControls", deleteAllContentControls);
     
     console.log("✅ Ribbon Commands registered:");
-    console.log("  - deleteAllContentControls");
+    console.log("  - deleteAllContentControls (with confirmation)");
+    console.log("=".repeat(60));
   }
 });
