@@ -1,10 +1,11 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-10 - V47 (WITH CONFIRMATION)
+// VERZIJA: 2025-02-10 - V48 (EXPLICIT TEXT COPY)
 // commands.js - Ribbon Command Functions
 // ============================================
-console.log("🔧 BA Word Add-in Commands VERZIJA: 2025-02-10 - V47");
+console.log("🔧 BA Word Add-in Commands VERZIJA: 2025-02-10 - V48");
+console.log("✅ EKSPLICITNO KOPIRANJE TEKSTA PRE BRISANJA");
 console.log("✅ SA CONFIRMATION DIALOG-OM");
 console.log("✅ Detaljno mapiranje pre brisanja");
 
@@ -157,7 +158,7 @@ async function mapContentControls() {
 
 /**
  * 🗑️ FAZA 2: Brisanje kontrola nakon potvrde
- * Prima listu kontrola iz mapiranja i briše ih
+ * NOVA LOGIKA: Eksplicitno kopira tekst PRE brisanja
  */
 async function deleteControlsByIndices(controlIndices) {
   console.log("\n🔄 FAZA 2: Brisanje potvđenih kontrola...");
@@ -198,7 +199,7 @@ async function deleteControlsByIndices(controlIndices) {
       }
 
       console.log(`🗑️ [${idx}] Brišem: ${meta.key}`);
-      console.log(`    Tekst pre brisanja: "${currentText.substring(0, 60)}..."`);
+      console.log(`    Tekst: "${currentText.substring(0, 60)}..."`);
 
       // Otključaj ako je zaključana
       if (cc.cannotDelete) {
@@ -206,11 +207,28 @@ async function deleteControlsByIndices(controlIndices) {
         cc.cannotDelete = false;
       }
 
-      // ⭐ KLJUČNA AKCIJA: Briši kontrolu, ZADRŽI TEKST
-      cc.delete(false);
+      // ⭐ NOVA LOGIKA - 3 KORAKA:
+      
+      // KORAK 1: Sačuvaj tekst iz kontrole
+      const textToKeep = cc.text || "";
+      console.log(`    📋 Kopiram tekst: "${textToKeep}"`);
+      
+      // KORAK 2: Ubaci tekst PRE kontrole (kao backup)
+      if (textToKeep) {
+        const range = cc.getRange(Word.RangeLocation.before);
+        range.insertText(textToKeep, Word.InsertLocation.end);
+        console.log(`    ✅ Tekst kopiran ispred kontrole`);
+      } else {
+        console.log(`    ⚠️ Kontrola je prazna, nema teksta za kopiranje`);
+      }
+      
+      await context.sync();
+      
+      // KORAK 3: Obriši kontrolu (sada je sigurno da je tekst van kontrole)
+      cc.delete(true); // true = obriši I SADRŽAJ kontrole (ali smo već kopirali tekst van)
       removed++;
       
-      console.log(`    ✅ Kontrola obrisana, tekst zadržan na istom mestu`);
+      console.log(`    ✅ Kontrola obrisana`);
     }
 
     await context.sync();
@@ -343,7 +361,8 @@ function showNotification(title, message) {
 // ============================================
 Office.onReady((info) => {
   if (info.host === Office.HostType.Word) {
-    console.log("✅ Commands.js V47 loaded - Word detected");
+    console.log("✅ Commands.js V48 loaded - Word detected");
+    console.log("✅ Eksplicitno kopiranje teksta implementirano");
     console.log("✅ Confirmation dialog implementiran");
     console.log("✅ Detaljno mapiranje pre brisanja");
     
@@ -351,7 +370,7 @@ Office.onReady((info) => {
     Office.actions.associate("deleteAllContentControls", deleteAllContentControls);
     
     console.log("✅ Ribbon Commands registered:");
-    console.log("  - deleteAllContentControls (with confirmation)");
+    console.log("  - deleteAllContentControls (V48 - explicit text copy)");
     console.log("=".repeat(60));
   }
 });

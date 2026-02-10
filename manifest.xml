@@ -6,12 +6,12 @@
   xsi:type="TaskPaneApp">
 
   <!-- ============================================ -->
-  <!-- VERZIJA: 1.0.0.47 (V47) - USER-FRIENDLY TEXT -->
+  <!-- VERZIJA: 1.0.0.48 (V48) - USER-FRIENDLY TEXT -->
   <!-- Datum: 2025-02-10 -->
   <!-- ============================================ -->
 
   <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
-  <Version>1.0.0.47</Version>
+  <Version>1.0.0.48</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
@@ -137,7 +137,7 @@
 
 
     <!-- ============================================ -->
-    <!-- GRAPH API SSO (V47 - SharePoint Templates) -->
+    <!-- GRAPH API SSO (V48) - SharePoint Templates) -->
     <!-- ============================================ -->
     <WebApplicationInfo>
       <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
