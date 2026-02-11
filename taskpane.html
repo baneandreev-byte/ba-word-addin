@@ -174,6 +174,30 @@
     </div>
   </div>
 
+  <!-- ========== MODAL (Delete Confirmation) ========== -->
+  <div id="deleteModalBackdrop" class="modal-backdrop hidden"></div>
+  
+  <div id="deleteModal" class="modal-dialog hidden">
+    <div class="modal-header">
+      <h3>Potvrda brisanja polja</h3>
+      <button id="btnDeleteModalClose" class="modal-close">×</button>
+    </div>
+
+    <div class="modal-body">
+      <p style="margin-bottom: 16px; color: #6b7280; line-height: 1.6;">
+        Da li sigurno želite da uklonite sva aktivna polja iz dokumenta?
+      </p>
+      <p style="margin-bottom: 0; color: #1f2937; font-weight: 600;">
+        Tekst će ostati sačuvan u dokumentu.
+      </p>
+    </div>
+
+    <div class="modal-footer">
+      <button id="btnDeleteCancel" class="btn-secondary">Otkaži</button>
+      <button id="btnDeleteConfirm" class="btn-primary" style="background: #dc2626;">Obriši polja</button>
+    </div>
+  </div>
+
   <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
