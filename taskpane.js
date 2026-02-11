@@ -1,7 +1,7 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V44 (SHAREPOINT TEMPLATES)
+// VERZIJA: 2025-02-11 - V53 (SHAREPOINT TEMPLATES)
 // ============================================
 console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V44");
 console.log("✅ NOVO: SharePoint templejti - Graph API integracija");
@@ -994,11 +994,13 @@ async function performDelete() {
       await context.sync();
       console.log("✅ Properties učitane");
 
-      // Briši kontrole UNAZAD (od kraja ka početku)
-      console.log("\n🗑️ Brisanje kontrola:");
+      // ⭐ FAZA 3A: MAPIRANJE - Kreiraj placeholder mapu
+      console.log("\n📋 FAZA 3A: Kreiranje placeholder mape:");
       console.log("-".repeat(60));
       
-      for (let i = controlsList.length - 1; i >= 0; i--) {
+      const placeholderMap = new Map();
+      
+      for (let i = 0; i < controlsList.length; i++) {
         const ctrl = controlsList[i];
         const idx = ctrl.index;
         
@@ -1017,32 +1019,107 @@ async function performDelete() {
           continue;
         }
 
-        console.log(`\n🗑️ [${idx}] Brišem: ${meta.key}`);
-        console.log(`    Tekst: "${currentText.substring(0, 50)}..."`);
+        const placeholderId = `###PLACEHOLDER_${i}###`;
+        placeholderMap.set(placeholderId, currentText);
+        
+        console.log(`📌 [${i}] ${meta.key}`);
+        console.log(`    Placeholder: ${placeholderId}`);
+        console.log(`    Tekst: "${currentText.substring(0, 40)}..."`);
+      }
+      
+      console.log(`\n✅ Kreirano ${placeholderMap.size} placeholder-a`);
+      console.log("-".repeat(60));
+
+      // ⭐ FAZA 3B: UBACI PLACEHOLDER-E ISPRED KONTROLA
+      console.log("\n🔖 FAZA 3B: Ubacivanje placeholder-a:");
+      console.log("-".repeat(60));
+      
+      for (let i = 0; i < controlsList.length; i++) {
+        const ctrl = controlsList[i];
+        const idx = ctrl.index;
+        
+        if (idx >= contentControls.items.length) continue;
+
+        const cc = contentControls.items[idx];
+        const tag = cc.tag || "";
+        const meta = parseTag(tag);
+        if (!meta) continue;
 
         // Otključaj ako je zaključana
         if (cc.cannotDelete) {
-          console.log(`    🔓 Otključavam kontrolu`);
           cc.cannotDelete = false;
         }
 
-        // ⭐ STRATEGIJA: Zameni kontrolu sa tekstom (jedan korak)
-        if (currentText) {
-          console.log(`    📝 Zamenjujem kontrolu sa tekstom`);
-          cc.insertText(currentText, Word.InsertLocation.replace);
-          console.log(`    ✅ Kontrola zamenjena tekstom - NEMA duplikacije`);
-        } else {
-          console.log(`    ⚠️ Prazna kontrola, brišem je`);
-          cc.delete(true);
-          console.log(`    ✅ Prazna kontrola obrisana`);
-        }
+        const placeholderId = `###PLACEHOLDER_${i}###`;
         
+        console.log(`🔖 [${i}] Ubacujem placeholder: ${placeholderId}`);
+        const beforeRange = cc.getRange(Word.RangeLocation.before);
+        beforeRange.insertText(placeholderId, Word.InsertLocation.end);
+      }
+      
+      await context.sync();
+      console.log("✅ Svi placeholder-i ubačeni");
+      console.log("-".repeat(60));
+
+      // ⭐ FAZA 3C: OBRIŠI KONTROLE SA SADRŽAJEM
+      console.log("\n🗑️ FAZA 3C: Brisanje kontrola:");
+      console.log("-".repeat(60));
+      
+      for (let i = controlsList.length - 1; i >= 0; i--) {
+        const ctrl = controlsList[i];
+        const idx = ctrl.index;
+        
+        if (idx >= contentControls.items.length) continue;
+
+        const cc = contentControls.items[idx];
+        const tag = cc.tag || "";
+        const meta = parseTag(tag);
+        if (!meta) continue;
+
+        console.log(`🗑️ [${i}] Brišem kontrolu: ${meta.key}`);
+        cc.delete(true);
         removed++;
       }
-
+      
       await context.sync();
+      console.log(`✅ Obrisano ${removed} kontrola`);
       console.log("-".repeat(60));
-      console.log(`\n✅ ZAVRŠENO: Obrisano ${removed} kontrola`);
+
+      // ⭐ FAZA 3D: ZAMENI PLACEHOLDER-E SA PRAVIM TEKSTOM
+      console.log("\n🔄 FAZA 3D: Zamena placeholder-a sa tekstom:");
+      console.log("-".repeat(60));
+      
+      // Učitaj ceo dokument tekst
+      const body = context.document.body;
+      body.load("text");
+      await context.sync();
+      
+      let documentText = body.text;
+      console.log(`📄 Dokument ima ${documentText.length} karaktera`);
+      
+      // Zameni svaki placeholder sa pravim tekstom
+      let replacements = 0;
+      for (const [placeholder, realText] of placeholderMap.entries()) {
+        if (documentText.includes(placeholder)) {
+          console.log(`🔄 Zamenjujem: ${placeholder} → "${realText.substring(0, 30)}..."`);
+          
+          const searchResults = body.search(placeholder, { matchCase: true, matchWholeWord: false });
+          searchResults.load("items");
+          await context.sync();
+          
+          for (const result of searchResults.items) {
+            result.insertText(realText, Word.InsertLocation.replace);
+            replacements++;
+          }
+          
+          await context.sync();
+        } else {
+          console.log(`⚠️ Placeholder ${placeholder} nije pronađen u dokumentu`);
+        }
+      }
+      
+      console.log(`✅ Zamenjeno ${replacements} placeholder-a`);
+      console.log("-".repeat(60));
     });
 
     if (removed === 0) {
