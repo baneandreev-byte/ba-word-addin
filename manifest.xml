@@ -6,12 +6,12 @@
   xsi:type="TaskPaneApp">
 
   <!-- ============================================ -->
-  <!-- VERZIJA: 1.0.0.49 (V49) - TASK PANE ONLY -->
-  <!-- Datum: 2025-02-10 -->
+  <!-- VERZIJA: 1.0.0.50 (V50) - SHAREPOINT TEMPLATES -->
+  <!-- Datum: 2025-02-07 -->
   <!-- ============================================ -->
 
   <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
-  <Version>1.0.0.49</Version>
+  <Version>1.0.0.50</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
@@ -31,7 +31,7 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250210_V49"/>
+    <SourceLocation DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V44"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -50,6 +50,8 @@
       <Host xsi:type="Document">
         <DesktopFormFactor>
 
+          <FunctionFile resid="Commands.Url"/>
+
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <OfficeTab id="TabHome">
               <Group id="BiroA.Group">
@@ -62,7 +64,6 @@
                   <bt:Image size="80" resid="Icon.80"/>
                 </Icon>
 
-                <!-- Task Pane Button -->
                 <Control xsi:type="Button" id="BiroA.Button">
                   <Label resid="BiroA.Button.Label"/>
                   <Supertip>
@@ -95,7 +96,8 @@
       </bt:Images>
 
       <bt:Urls>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250210_V49"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/taskpane.html?v=20250207_V44"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://baneandreev-byte.github.io/ba-word-addin/commands.html"/>
       </bt:Urls>
 
       <bt:ShortStrings>
@@ -104,20 +106,18 @@
       </bt:ShortStrings>
 
       <bt:LongStrings>
-        <bt:String id="BiroA.Button.Desc" DefaultValue="Upravljanje aktivnim poljima"/>
+        <bt:String id="BiroA.Button.Desc" DefaultValue="Upravljanje pametnim poljima"/>
       </bt:LongStrings>
     </Resources>
 
 
     <!-- ============================================ -->
-    <!-- GRAPH API SSO (V47 - SharePoint Templates) -->
+    <!-- GRAPH API SSO (V50) - SharePoint Templates) -->
     <!-- ============================================ -->
     <WebApplicationInfo>
       <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
       <Resource>api://baneandreev-byte.github.io/54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Resource>
       <Scopes>
-        <Scope>openid</Scope>
-        <Scope>profile</Scope>
         <Scope>Files.Read</Scope>
         <Scope>Sites.Read.All</Scope>
         <Scope>offline_access</Scope>

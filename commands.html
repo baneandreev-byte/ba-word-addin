@@ -5,13 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>BiroA Commands</title>
 
-    <!-- Office.js API -->
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    
-    <!-- ⭐ KRITIČNO: Učitaj commands.js NAKON office.js -->
-    <script src="commands.js"></script>
+    <script>
+      Office.onReady(() => {});
+    </script>
   </head>
-  <body>
-    <!-- Prazno body - ova stranica je samo host za funkcije -->
-  </body>
+  <body></body>
 </html>
+
