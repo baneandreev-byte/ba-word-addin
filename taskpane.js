@@ -968,8 +968,7 @@ async function deleteControlsAndXml() {
 
 async function performDelete() {
   try {
-    console.log("
-🔄 FAZA 3: Izvršavanje brisanja nakon potvrde (STABILNA strategija)...");
+    console.log("🔄 FAZA 3: Izvršavanje brisanja nakon potvrde (STABILNA strategija)...");
     console.log("=".repeat(60));
 
     const controlsList = window._controlsToDelete || [];
@@ -1936,13 +1935,40 @@ function bindUi() {
 }
 
 Office.onReady(async () => {
+  console.log("✅ Office.onReady STARTED");
+  
   try {
+    console.log("🔄 Pozivam loadStateFromDocument...");
     await loadStateFromDocument();
-    await loadTemplatesFromSharePoint(); // Load from SharePoint
+    console.log("✅ loadStateFromDocument završen, rows.length:", rows.length);
+    
+    console.log("🔄 Pozivam loadTemplatesFromSharePoint...");
+    
+    // Dodaj timeout da ne blokira renderRows ako se SharePoint zaglavi
+    try {
+      await Promise.race([
+        loadTemplatesFromSharePoint(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("SharePoint timeout")), 5000)
+        )
+      ]);
+      console.log("✅ loadTemplatesFromSharePoint završen");
+    } catch (timeoutError) {
+      console.warn("⚠️ loadTemplatesFromSharePoint timeout ili error:", timeoutError.message);
+      console.log("   Nastavljam dalje sa renderovanjem...");
+    }
+    
   } catch (e) {
-    console.error("Load state error:", e);
+    console.error("❌ Load state error:", e);
   }
 
+  console.log("🎨 Pozivam renderRows sa rows.length:", rows.length);
   renderRows();
+  console.log("✅ renderRows završen");
+  
+  console.log("🔗 Pozivam bindUi...");
   bindUi();
+  console.log("✅ bindUi završen");
+  
+  console.log("✅✅✅ Office.onReady COMPLETED ✅✅✅");
 });
