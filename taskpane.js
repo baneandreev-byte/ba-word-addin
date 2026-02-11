@@ -1026,24 +1026,18 @@ async function performDelete() {
           cc.cannotDelete = false;
         }
 
-        // ⭐ KORAK 1: Kopiraj tekst ISPRED kontrole
+        // ⭐ STRATEGIJA: Zameni kontrolu sa tekstom (jedan korak)
         if (currentText) {
-          console.log(`    📋 Kopiram tekst ispred kontrole`);
-          const range = cc.getRange(Word.RangeLocation.before);
-          range.insertText(currentText, Word.InsertLocation.end);
-          console.log(`    ✅ Tekst kopiran`);
+          console.log(`    📝 Zamenjujem kontrolu sa tekstom`);
+          cc.insertText(currentText, Word.InsertLocation.replace);
+          console.log(`    ✅ Kontrola zamenjena tekstom - NEMA duplikacije`);
         } else {
-          console.log(`    ⚠️ Prazna kontrola, nema teksta za kopiranje`);
+          console.log(`    ⚠️ Prazna kontrola, brišem je`);
+          cc.delete(true);
+          console.log(`    ✅ Prazna kontrola obrisana`);
         }
-
-        await context.sync();
-
-        // ⭐ KORAK 2: Obriši kontrolu SA sadržajem
-        console.log(`    🗑️ Brišem kontrolu sa sadržajem`);
-        cc.delete(true); // true = obriši I sadržaj (ali smo već kopirali tekst van)
         
         removed++;
-        console.log(`    ✅ Kontrola obrisana`);
       }
 
       await context.sync();

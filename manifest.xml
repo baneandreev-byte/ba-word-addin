@@ -6,12 +6,12 @@
   xsi:type="TaskPaneApp">
 
   <!-- ============================================ -->
-  <!-- VERZIJA: 1.0.0.51 (V51) - SHAREPOINT TEMPLATES -->
+  <!-- VERZIJA: 1.0.0.52 (V52) - SHAREPOINT TEMPLATES -->
   <!-- Datum: 2025-02-07 -->
   <!-- ============================================ -->
 
   <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
-  <Version>1.0.0.51</Version>
+  <Version>1.0.0.52</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
@@ -112,7 +112,7 @@
 
 
     <!-- ============================================ -->
-    <!-- GRAPH API SSO (V51) - SharePoint Templates) -->
+    <!-- GRAPH API SSO (V52) - SharePoint Templates) -->
     <!-- ============================================ -->
     <WebApplicationInfo>
       <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
