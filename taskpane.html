@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="sr">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BiroA Word dodatak</title>
+  <link rel="stylesheet" href="taskpane.css" />
+</head>
+
+<body>
+  <div class="shell">
+    
+    <!-- Status bar -->
+    <div id="status" class="status" style="display:none;"></div>
+
+    <!-- Tab buttons -->
+    <div class="tabs">
+      <button id="btnInsert" class="tab-btn">UBACI POLJE</button>
+      <button id="btnFill" class="tab-btn">POPUNI</button>
+      <button id="btnClear" class="tab-btn">OČISTI</button>
+      <button id="btnDelete" class="tab-btn danger">OBRIŠI</button>
+      <button id="btnTemplates" class="tab-btn">TEMPLEJTI</button>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      
+      <!-- Table header -->
+      <div class="table-header">
+        <div class="th"></div>
+        <div class="th">POLJE</div>
+        <div class="th">ODGOVOR</div>
+        <div class="th"></div>
+      </div>
+
+      <!-- Rows container -->
+      <div id="rows" class="table-body"></div>
+
+      <!-- Action buttons -->
+      <div class="actions">
+        <button id="btnAddRow" class="btn-primary">+ Dodaj red</button>
+        <div class="csv-group">
+          <button id="btnExportCSV" class="btn-secondary">Export CSV</button>
+          <button id="btnImportCSV" class="btn-secondary">Import CSV</button>
+        </div>
+      </div>
+
+      <!-- Help text -->
+      <div class="help">
+        <strong>⋮⋮ PREVUCI:</strong> uhvati handle i prevuci red gore/dole da promeniš redosled.<br>
+        <strong>UBACI POLJE:</strong> klikni red u tabeli → izaberi tip + format → klikni u dokument gde želiš polje.<br>
+        <strong>POPUNI:</strong> upiši vrednosti u tabelu i klikni POPUNI.<br>
+        <strong>OČISTI:</strong> vraća {POLJE}. <strong>OBRIŠI:</strong> uklanja kontrole, ostavlja tekst.
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ========== MODAL (Insert Field) ========== -->
+  <div id="modalBackdrop" class="modal-backdrop hidden"></div>
+  
+  <div id="modal" class="modal-dialog hidden">
+    <div class="modal-header">
+      <h3>Ubaci polje</h3>
+      <button id="btnModalClose" class="modal-close">×</button>
+    </div>
+
+    <div class="modal-body">
+      
+      <!-- Field name -->
+      <div class="field-name-box">
+        <span id="modalFieldName" class="field-name-pill"></span>
+      </div>
+
+      <!-- Type selection (radio buttons) -->
+      <div class="form-group">
+        <label class="form-label">Tip podatka:</label>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input type="radio" name="ftype" value="text" checked />
+            <span>Tekst</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="ftype" value="date" />
+            <span>Datum</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="ftype" value="number" />
+            <span>Broj</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Format selection -->
+      <div class="form-group">
+        <label class="form-label" for="formatSelect">Format:</label>
+        <select id="formatSelect" class="form-select"></select>
+        <div id="formatHint" class="format-hint"></div>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button id="btnModalCancel" class="btn-secondary">Otkaži</button>
+      <button id="btnModalOk" class="btn-primary">OK</button>
+    </div>
+  </div>
+
+  <!-- ========== MODAL (Templates) ========== -->
+  <div id="modalTemplatesBackdrop" class="modal-backdrop hidden"></div>
+  
+  <div id="modalTemplates" class="modal-dialog modal-templates hidden">
+    <div class="modal-header">
+      <h3>Templejti</h3>
+      <button id="btnModalTemplatesClose" class="modal-close">×</button>
+    </div>
+
+    <div class="modal-body">
+      
+      <!-- Templates toolbar -->
+      <div class="templates-toolbar">
+        <input id="templateSearch" class="form-input" type="text" placeholder="🔍 Pretraga templata..." />
+        <button id="btnRefreshTemplates" class="btn-secondary">🔄 Osveži</button>
+      </div>
+      
+      <!-- Lista templata -->
+      <div id="templatesList" class="templates-list">
+        <div class="empty-state">Nema sačuvanih templata</div>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button id="btnNewTemplate" class="btn-primary">+ Novi templejt</button>
+    </div>
+  </div>
+
+  <!-- ========== MODAL (Edit Template) ========== -->
+  <div id="modalEditTemplateBackdrop" class="modal-backdrop hidden"></div>
+  
+  <div id="modalEditTemplate" class="modal-dialog modal-edit-template hidden">
+    <div class="modal-header">
+      <h3 id="editTemplateTitle">Novi templejt</h3>
+      <button id="btnModalEditTemplateClose" class="modal-close">×</button>
+    </div>
+
+    <div class="modal-body">
+      
+      <!-- Ime templata -->
+      <div class="form-group">
+        <label class="form-label" for="templateName">Ime templata:</label>
+        <input type="text" id="templateName" class="form-input" placeholder="npr. Ugovor o delu" />
+      </div>
+
+      <!-- Opis -->
+      <div class="form-group">
+        <label class="form-label" for="templateDesc">Opis (opciono):</label>
+        <textarea id="templateDesc" class="form-textarea" rows="2" placeholder="Kratak opis šta ovaj templejt sadrži"></textarea>
+      </div>
+
+      <!-- Polja trenutno u tabeli -->
+      <div class="form-group">
+        <label class="form-label">Polja koja će biti uključena:</label>
+        <div id="templateFieldsList" class="template-fields-preview"></div>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button id="btnCancelEditTemplate" class="btn-secondary">Otkaži</button>
+      <button id="btnSaveTemplate" class="btn-primary">Sačuvaj</button>
+    </div>
+  </div>
+
+  <!-- ========== MODAL (Delete Confirmation) ========== -->
+  <div id="deleteModalBackdrop" class="modal-backdrop hidden"></div>
+  
+  <div id="deleteModal" class="modal-dialog hidden">
+    <div class="modal-header">
+      <h3>Potvrda brisanja polja</h3>
+      <button id="btnDeleteModalClose" class="modal-close">×</button>
+    </div>
+
+    <div class="modal-body">
+      <p style="margin-bottom: 16px; color: #6b7280; line-height: 1.6;">
+        Da li sigurno želite da uklonite sva aktivna polja iz dokumenta?
+      </p>
+      <p style="margin-bottom: 0; color: #1f2937; font-weight: 600;">
+        Tekst će ostati sačuvan u dokumentu.
+      </p>
+    </div>
+
+    <div class="modal-footer">
+      <button id="btnDeleteCancel" class="btn-secondary">Otkaži</button>
+      <button id="btnDeleteConfirm" class="btn-primary" style="background: #dc2626;">Obriši polja</button>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="taskpane.js"></script>
+
+</body>
+</html>
