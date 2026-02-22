@@ -1,7 +1,7 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V55 
+// VERZIJA: 2025-02-07 - V56 GitHUB templejti  
 // ============================================
 console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V44");
 console.log("✅ NOVO: SharePoint templejti - Graph API integracija");
@@ -1171,153 +1171,67 @@ async function importCSV() {
 }
 
 // ============================================
-// TEMPLATE MANAGER (V30 - SharePoint Integration)
+// TEMPLATE MANAGER (V56 - GitHub Integration - TEST FAZA)
 // ============================================
 
-// SharePoint site configuration
-const SHAREPOINT_CONFIG = {
-  siteUrl: "https://biroa.sharepoint.com/sites/Officetamplates",
-  folderPath: "/sites/Officetamplates/Deljeni dokumenti/Table addin word templetes"
+// GitHub konfiguracija
+const GITHUB_CONFIG = {
+  baseUrl: "https://raw.githubusercontent.com/baneandreev-byte/BiroA-templates-test/main",
+  apiUrl: "https://api.github.com/repos/baneandreev-byte/BiroA-templates-test/contents",
+  // Definisane grane (folderi) i njihovi fajlovi
+  branches: [
+    {
+      id: "01 IDR",
+      label: "IDR – Idejno rešenje",
+      files: [
+        "00 IDR Glavna sveska.dotx",
+        "01 IDR Sveska projekta.dotx"
+      ]
+    },
+    {
+      id: "02 PGD",
+      label: "PGD – Projekat za građevinsku dozvolu",
+      files: [
+        "00 PGD Glavna sveska.dotx",
+        "01 PGD Sveska projekta.dotx"
+      ]
+    },
+    {
+      id: "03 PZI",
+      label: "PZI – Projekat za izvođenje",
+      files: [
+        "00 PZI Glavna sveska.dotx",
+        "01 PZI Sveska projetka.dotx"
+      ]
+    },
+    {
+      id: "04 TK",
+      label: "TK – Tehnička kontrola",
+      files: [
+        "00 TK Glavna sveska.dotx",
+        "01 TK Sveska projekta.docx"
+      ]
+    }
+  ]
 };
 
 let templates = [];
 let editingTemplateId = null;
 
-// ---------- Graph API Helpers ----------
-
-// Get access token for Graph API
-async function getGraphToken() {
-  try {
-    const token = await OfficeRuntime.auth.getAccessToken({
-      allowSignInPrompt: true,
-      forMSGraphAccess: true
-    });
-    return token;
-  } catch (error) {
-    console.error("❌ Greška pri dobijanju tokena:", error);
-    console.error("❌ Error code:", error.code);
-    console.error("❌ Error message:", error.message);
-    console.error("❌ Error name:", error.name);
-    
-    // Detaljne poruke za različite greške
-    if (error.code === 13001) {
-      throw new Error("CONSENT REQUIRED: Korisnik mora da odobri pristup. Klikni 'Allow' kada se pojavi popup.");
-    } else if (error.code === 13002) {
-      throw new Error("USER NOT SIGNED IN: Korisnik nije ulogovan u Office. Uloguj se u Word.");
-    } else if (error.code === 13003) {
-      throw new Error("INTERNAL ERROR: Office SSO greška. Restartuj Word i probaj ponovo.");
-    } else if (error.code === 13004) {
-      throw new Error("INVALID RESOURCE: Resource URL u manifestu je pogrešan.");
-    } else if (error.code === 13005) {
-      throw new Error("INVALID GRANT: Token je istekao ili je nevažeći.");
-    } else if (error.code === 13006) {
-      throw new Error("CLIENT ERROR: Greška u konfiguraciji Azure AD aplikacije.");
-    } else if (error.code === 13007) {
-      throw new Error("MISSING CONSENT: Admin consent nije dat za aplikaciju.");
-    } else if (error.code === 13012) {
-      throw new Error("POPUP BLOCKED: Consent popup je blokiran. Dozvoli popups.");
-    } else {
-      throw new Error(`SSO greška (${error.code || 'unknown'}): ${error.message || 'Proveri Azure AD konfiguraciju'}`);
-    }
-  }
+// Izgradi raw GitHub URL za fajl
+function buildGitHubRawUrl(branchId, fileName) {
+  const encodedBranch = branchId.split("/").map(encodeURIComponent).join("/");
+  const encodedFile = encodeURIComponent(fileName);
+  return `${GITHUB_CONFIG.baseUrl}/${encodedBranch}/${encodedFile}`;
 }
 
-// Call Graph API
-async function callGraphAPI(endpoint, method = "GET", body = null) {
-  try {
-    const token = await getGraphToken();
-    
-    const options = {
-      method: method,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    };
-    
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-    
-    const response = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, options);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Graph API greška:", response.status, errorText);
-      throw new Error(`Graph API greška: ${response.status}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error("❌ callGraphAPI greška:", error);
-    throw error;
+// Skini .dotx/.docx fajl sa GitHub-a kao ArrayBuffer
+async function downloadFileContent(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`GitHub download greška: ${response.status} ${response.statusText}`);
   }
-}
-
-// Get SharePoint site ID
-async function getSharePointSiteId() {
-  try {
-    // Extract hostname and site path from URL
-    const url = new URL(SHAREPOINT_CONFIG.siteUrl);
-    const hostname = url.hostname;
-    const sitePath = url.pathname;
-    
-    // Call Graph API to get site
-    const site = await callGraphAPI(`/sites/${hostname}:${sitePath}`);
-    return site.id;
-  } catch (error) {
-    console.error("❌ getSharePointSiteId greška:", error);
-    throw error;
-  }
-}
-
-// Get files from SharePoint folder
-async function getSharePointFiles(folderPath) {
-  try {
-    const siteId = await getSharePointSiteId();
-    
-    // Encode folder path
-    const encodedPath = encodeURIComponent(folderPath);
-    
-    // Get drive items
-    const result = await callGraphAPI(`/sites/${siteId}/drive/root:${encodedPath}:/children`);
-    
-    // Filter only .docx files
-    const docxFiles = result.value.filter(file => 
-      file.name.toLowerCase().endsWith('.docx') && !file.name.startsWith('~')
-    );
-    
-    console.log(`✅ Pronađeno ${docxFiles.length} .docx fajlova`);
-    return docxFiles;
-  } catch (error) {
-    console.error("❌ getSharePointFiles greška:", error);
-    throw error;
-  }
-}
-
-// Download file content from SharePoint
-async function downloadFileContent(fileId) {
-  try {
-    const siteId = await getSharePointSiteId();
-    const token = await getGraphToken();
-    
-    // Get download URL
-    const response = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${fileId}/content`,
-      {
-        headers: { 'Authorization': `Bearer ${token}` }
-      }
-    );
-    
-    if (!response.ok) {
-      throw new Error(`Download greška: ${response.status}`);
-    }
-    
-    return await response.arrayBuffer();
-  } catch (error) {
-    console.error("❌ downloadFileContent greška:", error);
-    throw error;
-  }
+  return await response.arrayBuffer();
 }
 
 // Extract fields from .docx file
@@ -1363,8 +1277,14 @@ async function extractFieldsFromDocx(arrayBuffer) {
 
 // ---------- Template Management ----------
 
-// Učitaj templejte sa SharePointa
+// GitHub mode - templejti se biraju iz picker modala
 async function loadTemplatesFromSharePoint() {
+  templates = [];
+  console.log("ℹ️ GitHub mode: templejti se biraju iz picker modala");
+}
+
+// STARA funkcija - zadržana radi kompatibilnosti
+async function _loadTemplatesFromSharePoint_DISABLED() {
   try {
     setStatus("Učitavam templejte sa SharePointa...", "info");
     
@@ -1389,6 +1309,222 @@ async function loadTemplatesFromSharePoint() {
     // Fallback to local XML if SharePoint fails
     console.log("⚠️ Pokušavam da učitam lokalne templejte...");
     await loadTemplatesFromDocument();
+  }
+}
+
+// ============================================
+// GITHUB TEMPLATE PICKER MODAL
+// ============================================
+
+function openGitHubTemplateModal() {
+  // Kreiraj modal ako ne postoji
+  let backdrop = el("githubTemplateBackdrop");
+  if (!backdrop) {
+    backdrop = document.createElement("div");
+    backdrop.id = "githubTemplateBackdrop";
+    backdrop.style.cssText = `
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      z-index: 1000; display: flex; align-items: center; justify-content: center;
+    `;
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) closeGitHubTemplateModal();
+    });
+
+    const modal = document.createElement("div");
+    modal.id = "githubTemplateModal";
+    modal.style.cssText = `
+      background: #fff; border-radius: 10px; width: 360px; max-width: 95vw;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18); overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    `;
+
+    // Header
+    const header = document.createElement("div");
+    header.style.cssText = `
+      background: #1d4ed8; color: #fff; padding: 14px 18px;
+      display: flex; align-items: center; justify-content: space-between;
+    `;
+    header.innerHTML = `
+      <span style="font-weight:700; font-size:15px;">📁 Izaberi templejt</span>
+      <button id="githubTemplateClose" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;">×</button>
+    `;
+
+    // Body
+    const body = document.createElement("div");
+    body.id = "githubTemplateBody";
+    body.style.cssText = "padding: 18px;";
+
+    // Footer
+    const footer = document.createElement("div");
+    footer.id = "githubTemplateFooter";
+    footer.style.cssText = `
+      padding: 12px 18px; border-top: 1px solid #e5e7eb;
+      display: flex; gap: 8px; justify-content: flex-end;
+    `;
+
+    modal.appendChild(header);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    document.getElementById("githubTemplateClose").addEventListener("click", closeGitHubTemplateModal);
+  }
+
+  renderGitHubStep1();
+  el("githubTemplateBackdrop").style.display = "flex";
+}
+
+function closeGitHubTemplateModal() {
+  const backdrop = el("githubTemplateBackdrop");
+  if (backdrop) backdrop.style.display = "none";
+}
+
+// Korak 1: Izbor grane (foldera)
+function renderGitHubStep1() {
+  const body = el("githubTemplateBody");
+  const footer = el("githubTemplateFooter");
+  if (!body || !footer) return;
+
+  body.innerHTML = `
+    <p style="margin:0 0 14px; color:#374151; font-size:13px; font-weight:600;">Izaberi vrstu projekta:</p>
+  `;
+
+  footer.innerHTML = `
+    <button onclick="closeGitHubTemplateModal()" style="
+      padding: 8px 18px; border: 1px solid #d1d5db; border-radius:6px;
+      background:#fff; cursor:pointer; font-size:13px; color:#374151;
+    ">Otkaži</button>
+  `;
+
+  GITHUB_CONFIG.branches.forEach(branch => {
+    const btn = document.createElement("button");
+    btn.style.cssText = `
+      display: block; width: 100%; text-align: left; padding: 12px 14px;
+      margin-bottom: 8px; border: 1px solid #e5e7eb; border-radius: 8px;
+      background: #f9fafb; cursor: pointer; font-size: 13px; color: #1f2937;
+      transition: all 0.15s;
+    `;
+    btn.innerHTML = `
+      <div style="font-weight:700; color:#1d4ed8;">${branch.id}</div>
+      <div style="font-size:12px; color:#6b7280; margin-top:2px;">${branch.label}</div>
+    `;
+    btn.addEventListener("mouseenter", () => {
+      btn.style.background = "#eff6ff";
+      btn.style.borderColor = "#93c5fd";
+    });
+    btn.addEventListener("mouseleave", () => {
+      btn.style.background = "#f9fafb";
+      btn.style.borderColor = "#e5e7eb";
+    });
+    btn.addEventListener("click", () => renderGitHubStep2(branch));
+    body.appendChild(btn);
+  });
+}
+
+// Korak 2: Izbor fajla unutar grane
+function renderGitHubStep2(branch) {
+  const body = el("githubTemplateBody");
+  const footer = el("githubTemplateFooter");
+  if (!body || !footer) return;
+
+  body.innerHTML = `
+    <p style="margin:0 0 6px; font-size:12px; color:#6b7280;">
+      ← <span id="githubBackBtn" style="cursor:pointer; color:#1d4ed8; text-decoration:underline;">Nazad</span>
+    </p>
+    <p style="margin:0 0 14px; color:#374151; font-size:13px; font-weight:600;">
+      ${branch.id} – izaberi svesku:
+    </p>
+  `;
+
+  document.getElementById("githubBackBtn").addEventListener("click", renderGitHubStep1);
+
+  footer.innerHTML = `
+    <button onclick="closeGitHubTemplateModal()" style="
+      padding: 8px 18px; border: 1px solid #d1d5db; border-radius:6px;
+      background:#fff; cursor:pointer; font-size:13px; color:#374151;
+    ">Otkaži</button>
+  `;
+
+  branch.files.forEach(fileName => {
+    const btn = document.createElement("button");
+    btn.style.cssText = `
+      display: block; width: 100%; text-align: left; padding: 12px 14px;
+      margin-bottom: 8px; border: 1px solid #e5e7eb; border-radius: 8px;
+      background: #f9fafb; cursor: pointer; font-size: 13px; color: #1f2937;
+      transition: all 0.15s;
+    `;
+    btn.innerHTML = `
+      <span style="margin-right:8px;">📄</span>${fileName}
+    `;
+    btn.addEventListener("mouseenter", () => {
+      btn.style.background = "#eff6ff";
+      btn.style.borderColor = "#93c5fd";
+    });
+    btn.addEventListener("mouseleave", () => {
+      btn.style.background = "#f9fafb";
+      btn.style.borderColor = "#e5e7eb";
+    });
+    btn.addEventListener("click", () => openTemplateFromGitHub(branch.id, fileName));
+    body.appendChild(btn);
+  });
+}
+
+// Skini i otvori templejt u Wordu
+async function openTemplateFromGitHub(branchId, fileName) {
+  const body = el("githubTemplateBody");
+  if (body) {
+    body.innerHTML = `
+      <div style="text-align:center; padding:24px; color:#374151;">
+        <div style="font-size:32px; margin-bottom:12px;">⏳</div>
+        <div style="font-weight:600;">Preuzimam templejt...</div>
+        <div style="font-size:12px; color:#6b7280; margin-top:6px;">${fileName}</div>
+      </div>
+    `;
+  }
+
+  try {
+    const url = buildGitHubRawUrl(branchId, fileName);
+    console.log("📥 Skidamo templejt:", url);
+
+    const arrayBuffer = await downloadFileContent(url);
+
+    // Otvori u Wordu kao novi dokument
+    await Word.run(async (context) => {
+      // Konvertuj ArrayBuffer u Base64
+      const uint8Array = new Uint8Array(arrayBuffer);
+      let binary = "";
+      for (let i = 0; i < uint8Array.length; i++) {
+        binary += String.fromCharCode(uint8Array[i]);
+      }
+      const base64 = btoa(binary);
+
+      // Kreiraj novi dokument iz templejta
+      const doc = context.application.createDocument(base64);
+      doc.open();
+      await context.sync();
+    });
+
+    closeGitHubTemplateModal();
+    setStatus(`Templejt otvoren: ${fileName}`, "success");
+    console.log("✅ Templejt otvoren:", fileName);
+
+  } catch (error) {
+    console.error("❌ Greška pri otvaranju templejta:", error);
+    setStatus(`Greška pri otvaranju templejta: ${error.message}`, "error");
+    if (body) {
+      body.innerHTML = `
+        <div style="text-align:center; padding:24px; color:#dc2626;">
+          <div style="font-size:32px; margin-bottom:12px;">❌</div>
+          <div style="font-weight:600;">Greška pri preuzimanju</div>
+          <div style="font-size:12px; margin-top:6px;">${error.message}</div>
+          <button onclick="renderGitHubStep1()" style="
+            margin-top:14px; padding:8px 16px; background:#1d4ed8; color:#fff;
+            border:none; border-radius:6px; cursor:pointer;
+          ">Pokušaj ponovo</button>
+        </div>
+      `;
+    }
   }
 }
 
@@ -1837,7 +1973,7 @@ function bindUi() {
   if (btnFill) btnFill.addEventListener("click", fillFieldsFromTable);
   if (btnClear) btnClear.addEventListener("click", clearFieldsKeepControls);
   if (btnDelete) btnDelete.addEventListener("click", deleteControlsAndXml);
-  if (btnTemplates) btnTemplates.addEventListener("click", openTemplatesModal);
+  if (btnTemplates) btnTemplates.addEventListener("click", openGitHubTemplateModal);
   if (btnExportCSV) btnExportCSV.addEventListener("click", exportCSV);
   if (btnImportCSV) btnImportCSV.addEventListener("click", importCSV);
 
