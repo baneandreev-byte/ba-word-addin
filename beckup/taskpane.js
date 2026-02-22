@@ -532,11 +532,8 @@ function closeModal() {
 // ---------- Delete Confirm Modal ----------
 function showDeleteConfirmModal() {
   const modal = el("deleteModal");
-  const backdrop = el("deleteModalBackdrop");
-  if (!modal || !backdrop) {
-    console.error("❌ Delete modal elementi ne postoje u HTML-u!");
-    return;
-  }
+  const backdrop = el("modalBackdrop");
+  if (!modal || !backdrop) return;
   
   modal.classList.remove("hidden");
   backdrop.classList.remove("hidden");
@@ -544,7 +541,7 @@ function showDeleteConfirmModal() {
 
 function closeDeleteModal() {
   const modal = el("deleteModal");
-  const backdrop = el("deleteModalBackdrop");
+  const backdrop = el("modalBackdrop");
   if (modal) modal.classList.add("hidden");
   if (backdrop) backdrop.classList.add("hidden");
 }
@@ -806,255 +803,83 @@ async function clearFieldsKeepControls() {
 // ============================================
 // FIX: deleteControlsAndXml - Custom Modal umesto confirm()
 // ============================================
-/**
- * FAZA 1: Mapiranje svih BA_FIELD kontrola
- * Analizira dokument i vraća listu kontrola koje će biti obrisane
- */
-async function mapControlsForDeletion() {
-  console.log("🔄 FAZA 1: Mapiranje kontrola za brisanje...");
-  console.log("=".repeat(60));
-  
-  const controlsToDelete = [];
-  
-  await Word.run(async (context) => {
-    const contentControls = context.document.contentControls;
-    contentControls.load("items");
-    await context.sync();
-
-    const totalControls = contentControls.items.length;
-    console.log(`📊 Ukupno content controls u dokumentu: ${totalControls}`);
-
-    if (totalControls === 0) {
-      console.log("ℹ️ Nema content control-a u dokumentu");
-      return;
-    }
-
-    // Učitaj properties za sve kontrole
-    for (const cc of contentControls.items) {
-      cc.load("tag,text,title");
-    }
-    await context.sync();
-    console.log("✅ Properties učitane za sve kontrole");
-
-    // Analiziraj svaku kontrolu
-    console.log("\n📋 Detaljno mapiranje:");
-    console.log("-".repeat(60));
-    
-    for (let i = 0; i < contentControls.items.length; i++) {
-      const cc = contentControls.items[i];
-      const tag = cc.tag || "";
-      const title = cc.title || "(bez naslova)";
-      const text = cc.text || "";
-      
-      console.log(`\n[${i}] Kontrola:`);
-      console.log(`    Title: "${title}"`);
-      console.log(`    Tag: "${tag}"`);
-      console.log(`    Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
-      
-      const meta = parseTag(tag);
-      
-      if (!meta) {
-        console.log(`    ⏭️ PRESKAČEM - nije BA_FIELD kontrola`);
-        continue;
-      }
-      
-      console.log(`    ✅ BIĆE OBRISAN - BA_FIELD: ${meta.key}`);
-      
-      // Dodaj u listu za brisanje
-      controlsToDelete.push({
-        index: i,
-        key: meta.key,
-        type: meta.type,
-        format: meta.format,
-        text: text,
-        title: title
-      });
-    }
-
-    console.log("-".repeat(60));
-    console.log(`\n📊 Rezime mapiranja:`);
-    console.log(`   Total kontrola: ${totalControls}`);
-    console.log(`   BA_FIELD kontrola: ${controlsToDelete.length}`);
-    console.log(`   Preskočeno: ${totalControls - controlsToDelete.length}`);
-    console.log("=".repeat(60));
-  });
-
-  return controlsToDelete;
-}
-
-/**
- * FAZA 2: Prikaz confirmation dialog-a sa listom kontrola
- */
-function showDeleteConfirmationWithList(controlsList) {
-  console.log("\n💬 Prikazujem confirmation dialog sa listom kontrola...");
-  
-  // Pripremi HTML listu kontrola
-  let listHtml = '';
-  if (controlsList.length === 0) {
-    listHtml = '<p style="text-align: center; color: #9ca3af; font-style: italic;">Nema BA_FIELD kontrola za brisanje</p>';
-  } else {
-    listHtml = '<div style="max-height: 300px; overflow-y: auto; margin: 16px 0;">';
-    controlsList.forEach((ctrl, idx) => {
-      const truncatedText = ctrl.text.length > 60 
-        ? ctrl.text.substring(0, 60) + '...' 
-        : ctrl.text;
-      
-      listHtml += `
-        <div style="
-          padding: 12px;
-          margin-bottom: 8px;
-          border: 1px solid #e5e7eb;
-          border-radius: 6px;
-          background: #f9fafb;
-        ">
-          <div style="font-weight: 600; color: #1f2937; margin-bottom: 4px;">
-            ${idx + 1}. ${ctrl.key}
-          </div>
-          <div style="font-size: 12px; color: #6b7280; font-style: italic;">
-            → "${truncatedText || '(prazno)'}"
-          </div>
-        </div>
-      `;
-    });
-    listHtml += '</div>';
-  }
-
-  // Ažuriraj modal body sa listom
-  const modal = el("deleteModal");
-  if (modal) {
-    const modalBody = modal.querySelector(".modal-body");
-    if (modalBody) {
-      modalBody.innerHTML = `
-        <p style="margin-bottom: 16px; color: #6b7280; line-height: 1.6;">
-          Pronađeno je <strong style="color: #1f2937;">${controlsList.length}</strong> aktivnih polja koja će biti uklonjena:
-        </p>
-        ${listHtml}
-        <p style="margin-top: 16px; margin-bottom: 0; color: #1f2937; font-weight: 600; text-align: center; padding: 12px; background: #fef3c7; border-radius: 6px; border: 1px solid #fbbf24;">
-          ⚠️ Tekst iz svakog polja će biti sačuvan u dokumentu
-        </p>
-      `;
-    }
-  }
-
-  // Prikaži modal
-  showDeleteConfirmModal();
-}
-
 async function deleteControlsAndXml() {
-  try {
-    console.log("🔴 deleteControlsAndXml() - POČETAK");
-    console.log("=".repeat(60));
-    
-    // FAZA 1: Mapiraj sve kontrole
-    const controlsList = await mapControlsForDeletion();
-    
-    if (controlsList.length === 0) {
-      setStatus("Nema aktivnih polja za brisanje.", "info");
-      return;
-    }
-    
-    // Sačuvaj listu u globalnu promenljivu za performDelete
-    window._controlsToDelete = controlsList;
-    
-    // FAZA 2: Prikaži confirmation dialog sa listom
-    showDeleteConfirmationWithList(controlsList);
-    
-  } catch (error) {
-    console.error("❌ Greška pri mapiranju kontrola:", error);
-    console.error("❌ Stack:", error.stack);
-    setStatus("Greška pri analizi polja.", "error");
-  }
+  // Prikaži custom confirm modal
+  showDeleteConfirmModal();
 }
 
 async function performDelete() {
   try {
-    console.log("🔄 FAZA 3: Izvršavanje brisanja nakon potvrde (STABILNA strategija)...");
-    console.log("=".repeat(60));
-
-    const controlsList = window._controlsToDelete || [];
-    const keysToDelete = new Set(
-      controlsList
-        .map((c) => String(c?.key || "").trim())
-        .filter((k) => k.length > 0)
-    );
-
+    console.log("🔴 Počinjem brisanje content controls...");
+    
+    const map = buildValueMap();
     let removed = 0;
 
     await Word.run(async (context) => {
-      const contentControls = context.document.contentControls;
-      // Učitaj minimalno neophodne podatke
-      contentControls.load("items/tag,text,cannotDelete");
+      const ccs = context.document.contentControls;
+      ccs.load("items");
       await context.sync();
 
-      const all = contentControls.items || [];
-      console.log(`📊 Trenutno content controls u dokumentu: ${all.length}`);
+      console.log(`  Pronađeno ${ccs.items.length} content controls`);
 
-      // Filtriraj BA_FIELD kontrole (po tag-u), bez oslanjanja na indekse
-      const targets = [];
-      for (const cc of all) {
+      // Učitaj sve potrebne properties
+      for (const cc of ccs.items) {
+        cc.load("tag,text");
+      }
+      await context.sync();
+
+      // Prvo prolaz: zameni svaki CC sa plain text-om
+      const toDelete = [];
+      for (const cc of ccs.items) {
         const meta = parseTag(cc.tag || "");
         if (!meta) continue;
-        // Ako imamo listu ključeva iz modala, briši samo te; u suprotnom briši sve BA_FIELD
-        if (keysToDelete.size > 0 && !keysToDelete.has(meta.key)) continue;
-        targets.push({ cc, meta });
-      }
 
-      if (targets.length === 0) {
-        console.log("ℹ️ Nema BA_FIELD kontrola za brisanje (u trenutnom stanju dokumenta).");
-        return;
-      }
+        console.log(`  - Obrađujem CC za polje: ${meta.key}`);
 
-      console.log(`🧹 Biće obrisano ${targets.length} BA_FIELD kontrola (wrapper), tekst ostaje.`);
-
-      // 1) Otključaj sve (ako je potrebno) u jednoj turi
-      for (const t of targets) {
-        if (t.cc.cannotDelete) t.cc.cannotDelete = false;
-      }
-
-      // 2) Obriši wrapper, zadrži sadržaj (keepContent=true)
-      for (const t of targets) {
-        t.cc.delete(true);
+        // Uzmi formatirani tekst ili trenutni tekst u CC-u
+        const finalText = map.get(meta.key)?.formatted ?? cc.text;
+        
+        // Umetni plain text NAKON content control-a
+        const range = cc.getRange(Word.RangeLocation.after);
+        range.insertText(finalText, Word.InsertLocation.start);
+        
+        // Označi CC za brisanje
+        toDelete.push(cc);
+        removed++;
       }
 
       await context.sync();
-      removed = targets.length;
+      console.log(`  Umetnut tekst za ${removed} polja`);
 
-      console.log(`✅ ZAVRŠENO: Obrisano ${removed} kontrola (wrapper), sadržaj sačuvan.`);
+      // Drugi prolaz: obriši sve CC-ove BEZ sadržaja (text je već van CC-a)
+      for (const cc of toDelete) {
+        try {
+          cc.delete(false); // false jer smo vec izvukli text
+        } catch (e) {
+          console.error("  Greška pri brisanju:", e);
+        }
+      }
+
+      await context.sync();
     });
 
-    if (removed === 0) {
-      setStatus("Nema polja za brisanje.", "info");
-      closeDeleteModal();
-      return;
-    }
+    console.log(`✅ Uklonjeno ${removed} content controls`);
 
     // Obriši XML state
-    try {
-      await deleteSavedStateFromDocument();
-      console.log("✅ XML state obrisan");
-    } catch (error) {
-      console.warn("⚠️ XML state greška (nije kritično):", error);
-    }
+    await deleteSavedStateFromDocument();
+    console.log("✅ XML state obrisan");
 
     // Očisti lokalne podatke
     rows = [];
     selectedRowIndex = null;
     renderRows();
 
-    // Očisti globalnu listu
-    window._controlsToDelete = null;
-
-    setStatus(`Dokument očišćen: ${removed} polja uklonjeno.`, "info");
-    closeDeleteModal();
-    console.log("=".repeat(60));
+    setStatus(`Dokument očišćen: ${removed} polja uklonjeno, plugin podaci obrisani.`, "info");
   } catch (error) {
     console.error("❌ GREŠKA pri brisanju:", error);
-    console.error("❌ Stack:", error.stack);
     setStatus("Greška pri brisanju polja. Vidi konzolu.", "error");
-    closeDeleteModal();
   }
 }
-
 
 // ---------- CSV ----------
 function csvEscapeCell(s, delimiter = ";") {
@@ -1173,6 +998,67 @@ async function importCSV() {
 // ============================================
 // TEMPLATE MANAGER (V30 - SharePoint Integration)
 // ============================================
+
+// ============================================
+// TEMPLATE SOURCE SWITCH (INTERNAL TEST)
+// - GitHub (public repo) as temporary template host
+// - SharePoint code stays for later (already implemented below)
+// ============================================
+
+const TEMPLATE_SOURCE = "github"; // "github" | "sharepoint"
+
+// GitHub templates config (PUBLIC REPO)
+// 1) Create repo with your dotx files + manifest.json in root
+// 2) Set manifestUrl to raw github URL below
+const GITHUB_TEMPLATES_CONFIG = {
+  manifestUrl: "https://raw.githubusercontent.com/<OWNER>/<REPO>/main/manifest.json"
+};
+
+// ---------- Generic fetch helpers (no-cache) ----------
+async function fetchJsonNoCache(url) {
+  const u = new URL(url);
+  u.searchParams.set("v", Date.now().toString());
+  const res = await fetch(u.toString(), { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status} - ${res.statusText}`);
+  return res.json();
+}
+
+async function fetchArrayBufferNoCache(url) {
+  const u = new URL(url);
+  u.searchParams.set("v", Date.now().toString());
+  const res = await fetch(u.toString(), { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status} - ${res.statusText}`);
+  return res.arrayBuffer();
+}
+
+// ---------- GitHub Templates ----------
+async function loadTemplatesFromGithub() {
+  try {
+    setStatus("Učitavam templejte sa GitHub-a...", "info");
+
+    const manifest = await fetchJsonNoCache(GITHUB_TEMPLATES_CONFIG.manifestUrl);
+    const baseRaw = manifest.baseRaw;
+    const entries = Object.entries(manifest.templates || {});
+
+    templates = entries.map(([key, t]) => ({
+      id: key,
+      name: t.name || key,
+      desc: `GitHub${t.version ? " (" + t.version + ")" : ""}`,
+      source: "github",
+      baseRaw: baseRaw,
+      path: t.path,
+      fields: [] // loaded on demand from the template file
+    }));
+
+    console.log("✅ Učitano", templates.length, "templata sa GitHub-a");
+    setStatus(`Učitano ${templates.length} templata (GitHub)`, "success");
+  } catch (error) {
+    console.error("❌ Greška pri učitavanju templata sa GitHub-a:", error);
+    setStatus("Greška pri učitavanju templata sa GitHub-a", "error");
+    templates = [];
+  }
+}
+
 
 // SharePoint site configuration
 const SHAREPOINT_CONFIG = {
@@ -1603,17 +1489,37 @@ async function loadTemplate(templateId) {
   try {
     setStatus(`Učitavam templejt: ${template.name}...`, "info");
     
-    // If template is from SharePoint and fields not loaded yet
-    if (template.fileId && template.fields.length === 0) {
-      console.log("📥 Skidam fajl sa SharePointa:", template.name);
-      
-      const arrayBuffer = await downloadFileContent(template.fileId);
+    // If template is from GitHub and fields not loaded yet
+    if (template.source === "github" && template.fields.length === 0) {
+      console.log("📥 Skidam fajl sa GitHub-a:", template.name);
+
+      if (!template.baseRaw || !template.path) {
+        setStatus("GitHub template nije pravilno podešen (baseRaw/path).", "error");
+        return;
+      }
+
+      const fileUrl = encodeURI(`${template.baseRaw}/${template.path}`);
+      const arrayBuffer = await fetchArrayBufferNoCache(fileUrl);
       template.fields = await extractFieldsFromDocx(arrayBuffer);
-      
+
       if (template.fields.length === 0) {
         setStatus("Templejt nema polja ili nisu pronađena", "error");
         return;
       }
+    }
+
+    // If template is from SharePoint and fields not loaded yet
+    if (template.fileId && template.fields.length === 0) {
+      console.log("📥 Skidam fajl sa SharePointa:", template.name);
+
+      const arrayBuffer = await downloadFileContent(template.fileId);
+      template.fields = await extractFieldsFromDocx(arrayBuffer);
+
+      if (template.fields.length === 0) {
+        setStatus("Templejt nema polja ili nisu pronađena", "error");
+        return;
+      }
+    }
     }
     
     // Load fields into table
@@ -1880,8 +1786,12 @@ function bindUi() {
   if (btnRefreshTemplates) {
     btnRefreshTemplates.addEventListener("click", async () => {
       setStatus("Osvežavam templejte...", "info");
+      if (TEMPLATE_SOURCE === "github") {
+      await loadTemplatesFromGithub();
+    } else {
       await loadTemplatesFromSharePoint();
-      renderTemplatesList();
+    }
+    renderTemplatesList();
     });
   }
   
@@ -1935,40 +1845,17 @@ function bindUi() {
 }
 
 Office.onReady(async () => {
-  console.log("✅ Office.onReady STARTED");
-  
   try {
-    console.log("🔄 Pozivam loadStateFromDocument...");
     await loadStateFromDocument();
-    console.log("✅ loadStateFromDocument završen, rows.length:", rows.length);
-    
-    console.log("🔄 Pozivam loadTemplatesFromSharePoint...");
-    
-    // Dodaj timeout da ne blokira renderRows ako se SharePoint zaglavi
-    try {
-      await Promise.race([
-        loadTemplatesFromSharePoint(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("SharePoint timeout")), 5000)
-        )
-      ]);
-      console.log("✅ loadTemplatesFromSharePoint završen");
-    } catch (timeoutError) {
-      console.warn("⚠️ loadTemplatesFromSharePoint timeout ili error:", timeoutError.message);
-      console.log("   Nastavljam dalje sa renderovanjem...");
+    if (TEMPLATE_SOURCE === "github") {
+      await loadTemplatesFromGithub();
+    } else {
+      await loadTemplatesFromSharePoint();
     }
-    
   } catch (e) {
-    console.error("❌ Load state error:", e);
+    console.error("Load state error:", e);
   }
 
-  console.log("🎨 Pozivam renderRows sa rows.length:", rows.length);
   renderRows();
-  console.log("✅ renderRows završen");
-  
-  console.log("🔗 Pozivam bindUi...");
   bindUi();
-  console.log("✅ bindUi završen");
-  
-  console.log("✅✅✅ Office.onReady COMPLETED ✅✅✅");
 });
