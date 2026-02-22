@@ -1,7 +1,7 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V44 (SHAREPOINT TEMPLATES)
+// VERZIJA: 2025-02-07 - V55 
 // ============================================
 console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V44");
 console.log("✅ NOVO: SharePoint templejti - Graph API integracija");
