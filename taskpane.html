@@ -21,6 +21,8 @@
       <button id="btnClear" class="tab-btn">OČISTI</button>
       <button id="btnDelete" class="tab-btn danger">OBRIŠI</button>
       <button id="btnTemplates" class="tab-btn">TEMPLEJTI</button>
+      <button id="btnTables" class="tab-btn">TABELE</button>
+
     </div>
 
     <!-- Content -->
@@ -197,6 +199,25 @@
       <button id="btnDeleteConfirm" class="btn-primary" style="background: #dc2626;">Obriši polja</button>
     </div>
   </div>
+
+  <!-- ========== MODAL (Tabele) ========== -->
+  <div id="modalTabeleBackdrop" class="modal-backdrop hidden"></div>
+
+  <div id="modalTabele" class="modal-dialog modal-tabele hidden">
+    <div class="modal-header">
+      <h3 id="tabeleModalTitle">Upravljanje tabelama</h3>
+      <button id="btnModalTabeleClose" class="modal-close">×</button>
+    </div>
+    <div class="modal-body" id="tabeleModalBody" style="padding:0; overflow:hidden; display:flex; flex-direction:column; max-height:75vh;">
+      <!-- Sadržaj se dinamički generiše -->
+    </div>
+    <div class="modal-footer" id="tabeleModalFooter">
+      <!-- Footer se dinamički generiše -->
+    </div>
+  </div>
+
+  <!-- ========== MODAL (Tabele - Generisanje) ========== -->
+  <!-- Sadržaj se dinamički generiše JS-om, kao GitHub picker modal -->
 
   <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>

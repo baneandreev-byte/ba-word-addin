@@ -1,7 +1,7 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V56 GitHUB templejti  
+// VERZIJA: 2025-02-07 - V57 
 // ============================================
 console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V44");
 console.log("✅ NOVO: SharePoint templejti - Graph API integracija");
@@ -1171,145 +1171,134 @@ async function importCSV() {
 }
 
 // ============================================
-// TEMPLATE MANAGER (V56 - GitHub Integration - TEST FAZA)
+// TEMPLATE MANAGER (V56 - GitHub + Struke Picker)
 // ============================================
 
 // GitHub konfiguracija
 const GITHUB_CONFIG = {
   baseUrl: "https://raw.githubusercontent.com/baneandreev-byte/BiroA-templates-test/main",
-  apiUrl: "https://api.github.com/repos/baneandreev-byte/BiroA-templates-test/contents",
-  // Definisane grane (folderi) i njihovi fajlovi
   branches: [
     {
-      id: "01 IDR",
-      label: "IDR – Idejno rešenje",
+      id: "01 IDR", label: "IDR – Idejno rešenje",
       files: [
-        "00 IDR Glavna sveska.dotx",
-        "01 IDR Sveska projekta.dotx"
+        { name: "00 IDR Glavna sveska.dotx", isGlavna: true },
+        { name: "01 IDR Sveska projekta.dotx", isGlavna: false }
       ]
     },
     {
-      id: "02 PGD",
-      label: "PGD – Projekat za građevinsku dozvolu",
+      id: "02 PGD", label: "PGD – Projekat za građevinsku dozvolu",
       files: [
-        "00 PGD Glavna sveska.dotx",
-        "01 PGD Sveska projekta.dotx"
+        { name: "00 PGD Glavna sveska.dotx", isGlavna: true },
+        { name: "01 PGD Sveska projekta.dotx", isGlavna: false }
       ]
     },
     {
-      id: "03 PZI",
-      label: "PZI – Projekat za izvođenje",
+      id: "03 PZI", label: "PZI – Projekat za izvođenje",
       files: [
-        "00 PZI Glavna sveska.dotx",
-        "01 PZI Sveska projetka.dotx"
+        { name: "00 PZI Glavna sveska.dotx", isGlavna: true },
+        { name: "01 PZI Sveska projetka.dotx", isGlavna: false }
       ]
     },
     {
-      id: "04 TK",
-      label: "TK – Tehnička kontrola",
+      id: "04 TK", label: "TK – Tehnička kontrola",
       files: [
-        "00 TK Glavna sveska.dotx",
-        "01 TK Sveska projekta.docx"
+        { name: "00 TK Glavna sveska.dotx", isGlavna: true },
+        { name: "01 TK Sveska projekta.docx", isGlavna: false }
       ]
     }
   ]
 };
 
+// Fiksna lista struka iz Excel-a
+// Grupe: oznaka grupe je prefiks pre "/" ili cela oznaka ako nema "/"
+const STRUKE_LIST = [
+  { oznaka: "00", naziv: "Glavna sveska", grupa: "00" },
+  { oznaka: "01", naziv: "Arhitektura", grupa: "01" },
+  { oznaka: "02/1", naziv: "Konstrukcija", grupa: "02" },
+  { oznaka: "02/2", naziv: "Saobraćajna konstrukcija", grupa: "02" },
+  { oznaka: "03/1", naziv: "Hidrotehničke instalacije", grupa: "03" },
+  { oznaka: "04/1", naziv: "Elektroenergetske instalacije", grupa: "04" },
+  { oznaka: "04/2", naziv: "Trafo stanica", grupa: "04" },
+  { oznaka: "05/1", naziv: "Signalne instalacije", grupa: "05" },
+  { oznaka: "05/2", naziv: "Stabilni sistem za dojavu požara", grupa: "05" },
+  { oznaka: "05/3", naziv: "Video nadzor", grupa: "05" },
+  { oznaka: "06/1", naziv: "Termotehničke instalacije", grupa: "06" },
+  { oznaka: "06/2", naziv: "Putnički lift", grupa: "06" },
+  { oznaka: "06/3", naziv: "Autolift", grupa: "06" },
+  { oznaka: "06/4", naziv: "Stabilni sistem za gašenje požara", grupa: "06" },
+  { oznaka: "06/5", naziv: "Ventilacija i nadpritisak garaže", grupa: "06" },
+  { oznaka: "07", naziv: "Tehnologija", grupa: "07" },
+  { oznaka: "08", naziv: "Saobraćajna signalizacija", grupa: "08" },
+  { oznaka: "09", naziv: "Spoljno uređenje", grupa: "09" },
+  { oznaka: "10/1", naziv: "Pripremni radovi - Projekat rušenja", grupa: "10" },
+  { oznaka: "10/2", naziv: "Pripremni radovi - Projekat obezbeđenja temeljne jame", grupa: "10" },
+  { oznaka: "GEO", naziv: "Elaborat geomehanike", grupa: "GEO" },
+  { oznaka: "EE", naziv: "Elaborat energetske efikasnosti", grupa: "EE" },
+];
+
+// State za picker
+let _pickerSelectedBranch = null;
+let _pickerSelectedFile = null;
+// Struke state: { grupa -> [ { naziv, checked, custom } ] }
+let _strukeState = {};
+
 let templates = [];
 let editingTemplateId = null;
 
-// Izgradi raw GitHub URL za fajl
+// ---------- GitHub Helpers ----------
+
 function buildGitHubRawUrl(branchId, fileName) {
-  const encodedBranch = branchId.split("/").map(encodeURIComponent).join("/");
-  const encodedFile = encodeURIComponent(fileName);
-  return `${GITHUB_CONFIG.baseUrl}/${encodedBranch}/${encodedFile}`;
+  return `${GITHUB_CONFIG.baseUrl}/${branchId.split("/").map(encodeURIComponent).join("/")}/${encodeURIComponent(fileName)}`;
 }
 
-// Skini .dotx/.docx fajl sa GitHub-a kao ArrayBuffer
 async function downloadFileContent(url) {
   const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`GitHub download greška: ${response.status} ${response.statusText}`);
-  }
+  if (!response.ok) throw new Error(`GitHub download greška: ${response.status}`);
   return await response.arrayBuffer();
 }
 
-// Extract fields from .docx file
-async function extractFieldsFromDocx(arrayBuffer) {
-  try {
-    // Load the docx file using JSZip
-    const zip = await JSZip.loadAsync(arrayBuffer);
-    
-    // Read document.xml
-    const docXml = await zip.file("word/document.xml").async("string");
-    
-    // Parse XML
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(docXml, "text/xml");
-    
-    // Find all content controls with BA_FIELD tags
-    const controls = doc.querySelectorAll('w\\:tag, tag');
-    const fields = [];
-    
-    controls.forEach(tagNode => {
-      const tagValue = tagNode.getAttribute('w:val') || tagNode.textContent;
-      const parsed = parseTag(tagValue);
-      
-      if (parsed) {
-        // Check if field already exists
-        if (!fields.find(f => f.field === parsed.key)) {
-          fields.push({
-            field: parsed.key,
-            type: parsed.type,
-            format: parsed.format
-          });
-        }
-      }
-    });
-    
-    console.log(`✅ Ekstraktovano ${fields.length} polja iz dokumenta`);
-    return fields;
-  } catch (error) {
-    console.error("❌ extractFieldsFromDocx greška:", error);
-    return [];
-  }
-}
-
-// ---------- Template Management ----------
-
-// GitHub mode - templejti se biraju iz picker modala
+// Placeholder - ne treba API poziv pri startu
 async function loadTemplatesFromSharePoint() {
   templates = [];
-  console.log("ℹ️ GitHub mode: templejti se biraju iz picker modala");
 }
 
-// STARA funkcija - zadržana radi kompatibilnosti
-async function _loadTemplatesFromSharePoint_DISABLED() {
-  try {
-    setStatus("Učitavam templejte sa SharePointa...", "info");
-    
-    const files = await getSharePointFiles(SHAREPOINT_CONFIG.folderPath);
-    
-    templates = files.map(file => ({
-      id: file.id,
-      name: file.name.replace('.docx', ''),
-      desc: `SharePoint: ${new Date(file.lastModifiedDateTime).toLocaleDateString('sr-RS')}`,
-      fileId: file.id,
-      downloadUrl: file['@microsoft.graph.downloadUrl'],
-      fields: [] // Will be loaded on demand
-    }));
-    
-    console.log("✅ Učitano", templates.length, "templata sa SharePointa");
-    setStatus(`Učitano ${templates.length} templata`, "success");
-  } catch (error) {
-    console.error("❌ Greška pri učitavanju templata:", error);
-    setStatus("Greška pri učitavanju templata sa SharePointa", "error");
-    templates = [];
-    
-    // Fallback to local XML if SharePoint fails
-    console.log("⚠️ Pokušavam da učitam lokalne templejte...");
-    await loadTemplatesFromDocument();
+// ---------- Struke logika ----------
+
+// Inicijalizuj state struka (sve unchecked, bez custom)
+function initStrukeState() {
+  _strukeState = {};
+  for (const s of STRUKE_LIST) {
+    if (s.grupa === "00") continue; // Glavna sveska se ne bira
+    if (!_strukeState[s.grupa]) {
+      _strukeState[s.grupa] = [];
+    }
+    _strukeState[s.grupa].push({ naziv: s.naziv, checked: false, custom: false });
   }
+}
+
+// Izračunaj konačne oznake za sve čekirane stavke
+function computeOznake() {
+  const result = [];
+
+  // Uvek ide Glavna sveska kao 00
+  result.push({ oznaka: "00", naziv: "Glavna sveska" });
+
+  for (const [grupa, stavke] of Object.entries(_strukeState)) {
+    const checked = stavke.filter(s => s.checked);
+    if (checked.length === 0) continue;
+
+    if (checked.length === 1) {
+      // Jedna stavka u grupi → bez podbroja
+      result.push({ oznaka: grupa, naziv: checked[0].naziv });
+    } else {
+      // Više stavki → grupa/1, grupa/2...
+      checked.forEach((s, i) => {
+        result.push({ oznaka: `${grupa}/${i + 1}`, naziv: s.naziv });
+      });
+    }
+  }
+
+  return result;
 }
 
 // ============================================
@@ -1317,49 +1306,44 @@ async function _loadTemplatesFromSharePoint_DISABLED() {
 // ============================================
 
 function openGitHubTemplateModal() {
-  // Kreiraj modal ako ne postoji
   let backdrop = el("githubTemplateBackdrop");
   if (!backdrop) {
     backdrop = document.createElement("div");
     backdrop.id = "githubTemplateBackdrop";
     backdrop.style.cssText = `
-      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-      z-index: 1000; display: flex; align-items: center; justify-content: center;
+      position:fixed; inset:0; background:rgba(0,0,0,0.5);
+      z-index:1000; display:flex; align-items:center; justify-content:center;
     `;
-    backdrop.addEventListener("click", (e) => {
+    backdrop.addEventListener("click", e => {
       if (e.target === backdrop) closeGitHubTemplateModal();
     });
 
     const modal = document.createElement("div");
     modal.id = "githubTemplateModal";
     modal.style.cssText = `
-      background: #fff; border-radius: 10px; width: 360px; max-width: 95vw;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.18); overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background:#fff; border-radius:10px; width:420px; max-width:95vw;
+      max-height:90vh; display:flex; flex-direction:column;
+      box-shadow:0 8px 32px rgba(0,0,0,0.2);
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
     `;
 
-    // Header
     const header = document.createElement("div");
+    header.id = "githubTemplateHeader";
     header.style.cssText = `
-      background: #1d4ed8; color: #fff; padding: 14px 18px;
-      display: flex; align-items: center; justify-content: space-between;
-    `;
-    header.innerHTML = `
-      <span style="font-weight:700; font-size:15px;">📁 Izaberi templejt</span>
-      <button id="githubTemplateClose" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;">×</button>
+      background:#1d4ed8; color:#fff; padding:14px 18px;
+      display:flex; align-items:center; justify-content:space-between;
+      border-radius:10px 10px 0 0; flex-shrink:0;
     `;
 
-    // Body
     const body = document.createElement("div");
     body.id = "githubTemplateBody";
-    body.style.cssText = "padding: 18px;";
+    body.style.cssText = "padding:18px; overflow-y:auto; flex:1;";
 
-    // Footer
     const footer = document.createElement("div");
     footer.id = "githubTemplateFooter";
     footer.style.cssText = `
-      padding: 12px 18px; border-top: 1px solid #e5e7eb;
-      display: flex; gap: 8px; justify-content: flex-end;
+      padding:12px 18px; border-top:1px solid #e5e7eb;
+      display:flex; gap:8px; justify-content:flex-end; flex-shrink:0;
     `;
 
     modal.appendChild(header);
@@ -1367,11 +1351,12 @@ function openGitHubTemplateModal() {
     modal.appendChild(footer);
     backdrop.appendChild(modal);
     document.body.appendChild(backdrop);
-
-    document.getElementById("githubTemplateClose").addEventListener("click", closeGitHubTemplateModal);
   }
 
-  renderGitHubStep1();
+  _pickerSelectedBranch = null;
+  _pickerSelectedFile = null;
+  initStrukeState();
+  renderPickerStep1();
   el("githubTemplateBackdrop").style.display = "flex";
 }
 
@@ -1380,153 +1365,417 @@ function closeGitHubTemplateModal() {
   if (backdrop) backdrop.style.display = "none";
 }
 
-// Korak 1: Izbor grane (foldera)
-function renderGitHubStep1() {
-  const body = el("githubTemplateBody");
+function setPickerHeader(title, showBack, onBack) {
+  const header = el("githubTemplateHeader");
+  if (!header) return;
+  header.innerHTML = `
+    <div style="display:flex; align-items:center; gap:10px;">
+      ${showBack ? `<button id="pickerBackBtn" style="background:rgba(255,255,255,0.2);border:none;color:#fff;font-size:16px;cursor:pointer;border-radius:4px;padding:2px 8px;">←</button>` : ""}
+      <span style="font-weight:700; font-size:15px;">${title}</span>
+    </div>
+    <button id="pickerCloseBtn" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1;">×</button>
+  `;
+  document.getElementById("pickerCloseBtn").addEventListener("click", closeGitHubTemplateModal);
+  if (showBack) document.getElementById("pickerBackBtn").addEventListener("click", onBack);
+}
+
+function setPickerFooter(buttons) {
   const footer = el("githubTemplateFooter");
-  if (!body || !footer) return;
+  if (!footer) return;
+  footer.innerHTML = "";
+  buttons.forEach(b => {
+    const btn = document.createElement("button");
+    btn.textContent = b.label;
+    btn.style.cssText = b.primary
+      ? "padding:8px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;"
+      : "padding:8px 18px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;color:#374151;";
+    btn.addEventListener("click", b.onClick);
+    footer.appendChild(btn);
+  });
+}
 
-  body.innerHTML = `
-    <p style="margin:0 0 14px; color:#374151; font-size:13px; font-weight:600;">Izaberi vrstu projekta:</p>
-  `;
-
-  footer.innerHTML = `
-    <button onclick="closeGitHubTemplateModal()" style="
-      padding: 8px 18px; border: 1px solid #d1d5db; border-radius:6px;
-      background:#fff; cursor:pointer; font-size:13px; color:#374151;
-    ">Otkaži</button>
-  `;
+// KORAK 1: Izbor grane
+function renderPickerStep1() {
+  setPickerHeader("📁 Izaberi vrstu projekta", false, null);
+  const body = el("githubTemplateBody");
+  body.innerHTML = "";
 
   GITHUB_CONFIG.branches.forEach(branch => {
     const btn = document.createElement("button");
     btn.style.cssText = `
-      display: block; width: 100%; text-align: left; padding: 12px 14px;
-      margin-bottom: 8px; border: 1px solid #e5e7eb; border-radius: 8px;
-      background: #f9fafb; cursor: pointer; font-size: 13px; color: #1f2937;
-      transition: all 0.15s;
+      display:block; width:100%; text-align:left; padding:12px 14px;
+      margin-bottom:8px; border:1px solid #e5e7eb; border-radius:8px;
+      background:#f9fafb; cursor:pointer; font-size:13px; color:#1f2937;
+      transition:all 0.15s;
     `;
     btn.innerHTML = `
-      <div style="font-weight:700; color:#1d4ed8;">${branch.id}</div>
-      <div style="font-size:12px; color:#6b7280; margin-top:2px;">${branch.label}</div>
+      <div style="font-weight:700;color:#1d4ed8;">${branch.id.replace(/^\d+\s/, "")}</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:2px;">${branch.label}</div>
     `;
-    btn.addEventListener("mouseenter", () => {
-      btn.style.background = "#eff6ff";
-      btn.style.borderColor = "#93c5fd";
+    btn.addEventListener("mouseenter", () => { btn.style.background="#eff6ff"; btn.style.borderColor="#93c5fd"; });
+    btn.addEventListener("mouseleave", () => { btn.style.background="#f9fafb"; btn.style.borderColor="#e5e7eb"; });
+    btn.addEventListener("click", () => {
+      _pickerSelectedBranch = branch;
+      renderPickerStep2();
     });
-    btn.addEventListener("mouseleave", () => {
-      btn.style.background = "#f9fafb";
-      btn.style.borderColor = "#e5e7eb";
-    });
-    btn.addEventListener("click", () => renderGitHubStep2(branch));
     body.appendChild(btn);
   });
+
+  setPickerFooter([
+    { label: "Otkaži", onClick: closeGitHubTemplateModal }
+  ]);
 }
 
-// Korak 2: Izbor fajla unutar grane
-function renderGitHubStep2(branch) {
+// KORAK 2: Izbor sveske
+function renderPickerStep2() {
+  const branch = _pickerSelectedBranch;
+  setPickerHeader(`📂 ${branch.label}`, true, renderPickerStep1);
   const body = el("githubTemplateBody");
-  const footer = el("githubTemplateFooter");
-  if (!body || !footer) return;
+  body.innerHTML = `<p style="margin:0 0 14px;color:#374151;font-size:13px;font-weight:600;">Izaberi svesku:</p>`;
 
-  body.innerHTML = `
-    <p style="margin:0 0 6px; font-size:12px; color:#6b7280;">
-      ← <span id="githubBackBtn" style="cursor:pointer; color:#1d4ed8; text-decoration:underline;">Nazad</span>
-    </p>
-    <p style="margin:0 0 14px; color:#374151; font-size:13px; font-weight:600;">
-      ${branch.id} – izaberi svesku:
-    </p>
-  `;
-
-  document.getElementById("githubBackBtn").addEventListener("click", renderGitHubStep1);
-
-  footer.innerHTML = `
-    <button onclick="closeGitHubTemplateModal()" style="
-      padding: 8px 18px; border: 1px solid #d1d5db; border-radius:6px;
-      background:#fff; cursor:pointer; font-size:13px; color:#374151;
-    ">Otkaži</button>
-  `;
-
-  branch.files.forEach(fileName => {
+  branch.files.forEach(file => {
     const btn = document.createElement("button");
     btn.style.cssText = `
-      display: block; width: 100%; text-align: left; padding: 12px 14px;
-      margin-bottom: 8px; border: 1px solid #e5e7eb; border-radius: 8px;
-      background: #f9fafb; cursor: pointer; font-size: 13px; color: #1f2937;
-      transition: all 0.15s;
+      display:block; width:100%; text-align:left; padding:12px 14px;
+      margin-bottom:8px; border:1px solid #e5e7eb; border-radius:8px;
+      background:#f9fafb; cursor:pointer; font-size:13px; color:#1f2937;
+      transition:all 0.15s;
     `;
-    btn.innerHTML = `
-      <span style="margin-right:8px;">📄</span>${fileName}
-    `;
-    btn.addEventListener("mouseenter", () => {
-      btn.style.background = "#eff6ff";
-      btn.style.borderColor = "#93c5fd";
+    btn.innerHTML = `<span style="margin-right:8px;">${file.isGlavna ? "📋" : "📄"}</span>${file.name}`;
+    btn.addEventListener("mouseenter", () => { btn.style.background="#eff6ff"; btn.style.borderColor="#93c5fd"; });
+    btn.addEventListener("mouseleave", () => { btn.style.background="#f9fafb"; btn.style.borderColor="#e5e7eb"; });
+    btn.addEventListener("click", () => {
+      _pickerSelectedFile = file;
+      if (file.isGlavna) {
+        initStrukeState();
+        renderPickerStep3();
+      } else {
+        openTemplateFromGitHub();
+      }
     });
-    btn.addEventListener("mouseleave", () => {
-      btn.style.background = "#f9fafb";
-      btn.style.borderColor = "#e5e7eb";
-    });
-    btn.addEventListener("click", () => openTemplateFromGitHub(branch.id, fileName));
     body.appendChild(btn);
   });
+
+  setPickerFooter([
+    { label: "Otkaži", onClick: closeGitHubTemplateModal }
+  ]);
 }
 
-// Skini i otvori templejt u Wordu
-async function openTemplateFromGitHub(branchId, fileName) {
+// KORAK 3: Izbor struka (samo za Glavnu svesku)
+function renderPickerStep3() {
+  setPickerHeader("🏗️ Izaberi struke projekta", true, renderPickerStep2);
   const body = el("githubTemplateBody");
+  body.innerHTML = "";
+
+  // Grupiši struke po grupi
+  const grupe = {};
+  for (const s of STRUKE_LIST) {
+    if (s.grupa === "00") continue;
+    if (!grupe[s.grupa]) grupe[s.grupa] = { naziv: s.naziv.split(" ")[0], stavke: [] };
+    grupe[s.grupa].stavke.push(s);
+  }
+
+  for (const [grupa, info] of Object.entries(grupe)) {
+    const state = _strukeState[grupa] || [];
+
+    const groupDiv = document.createElement("div");
+    groupDiv.style.cssText = `
+      border:1px solid #e5e7eb; border-radius:8px; margin-bottom:10px; overflow:hidden;
+    `;
+
+    // Zaglavlje grupe
+    const groupHeader = document.createElement("div");
+    groupHeader.style.cssText = `
+      background:#f3f4f6; padding:8px 12px; display:flex; 
+      align-items:center; gap:8px; font-size:13px; font-weight:600; color:#1f2937;
+    `;
+    groupHeader.innerHTML = `<span style="color:#6b7280;font-size:11px;min-width:28px;">${grupa}</span>`;
+
+    const groupBody = document.createElement("div");
+    groupBody.id = `strukaGroup_${grupa}`;
+    groupBody.style.cssText = "padding:4px 0;";
+
+    // Stavke u grupi
+    state.forEach((stavka, idx) => {
+      const row = createStrukaRow(grupa, idx, stavka);
+      groupBody.appendChild(row);
+    });
+
+    // Naziv grupe (prva stavka)
+    const prvaStavka = STRUKE_LIST.find(s => s.grupa === grupa);
+    const grupaNaziv = prvaStavka ? prvaStavka.naziv.replace(/\/\d+$/, "").replace(/\d+$/, "").trim() : "";
+    
+    // Nađi zajednički naziv grupe
+    const stavkeGrupe = STRUKE_LIST.filter(s => s.grupa === grupa);
+    let grupaNaslov = stavkeGrupe.length === 1 ? stavkeGrupe[0].naziv : extractGrupaNaslov(stavkeGrupe);
+    
+    groupHeader.innerHTML = `
+      <span style="color:#6b7280;font-size:11px;min-width:32px;font-family:monospace;">${grupa}</span>
+      <span style="flex:1;">${grupaNaslov}</span>
+    `;
+    
+    // Dugme za dodavanje custom stavke
+    const addBtn = document.createElement("button");
+    addBtn.textContent = "+ Dodaj svesku";
+    addBtn.style.cssText = `
+      display:block; margin:6px 12px 8px; padding:4px 10px;
+      background:none; border:1px dashed #93c5fd; border-radius:5px;
+      color:#1d4ed8; font-size:12px; cursor:pointer;
+    `;
+    addBtn.addEventListener("click", () => addCustomStavka(grupa, groupBody, addBtn));
+
+    groupDiv.appendChild(groupHeader);
+    groupDiv.appendChild(groupBody);
+    groupDiv.appendChild(addBtn);
+    body.appendChild(groupDiv);
+  }
+
+  setPickerFooter([
+    { label: "Otkaži", onClick: closeGitHubTemplateModal },
+    { label: "Otvori dokument →", primary: true, onClick: () => {
+      const checked = computeOznake();
+      console.log("✅ Izabrane struke:", checked);
+      // Sačuvaj u global state za kasniju upotrebu pri generisanju tabela
+      window._selectedStruke = checked;
+      openTemplateFromGitHub();
+    }}
+  ]);
+}
+
+function extractGrupaNaslov(stavke) {
+  if (stavke.length === 1) return stavke[0].naziv;
+  // Pokušaj da nađeš zajednički deo naziva, inače uzmi naziv prve
+  const first = stavke[0].naziv;
+  // Pronađi reči koje se pojavljuju u svim nazivima
+  const words = first.split(" ");
+  let common = "";
+  for (let i = words.length; i > 0; i--) {
+    const candidate = words.slice(0, i).join(" ");
+    if (stavke.every(s => s.naziv.startsWith(candidate))) {
+      common = candidate;
+      break;
+    }
+  }
+  return common || first;
+}
+
+function createStrukaRow(grupa, idx, stavka) {
+  const row = document.createElement("div");
+  row.style.cssText = `
+    display:flex; align-items:center; gap:8px; padding:6px 12px;
+    border-top:1px solid #f3f4f6;
+  `;
+  row.dataset.idx = idx;
+
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = stavka.checked;
+  cb.style.cssText = "width:15px;height:15px;cursor:pointer;accent-color:#1d4ed8;";
+  cb.addEventListener("change", () => {
+    _strukeState[grupa][idx].checked = cb.checked;
+  });
+
+  const label = document.createElement("span");
+  label.style.cssText = "flex:1; font-size:12px; color:#374151;";
+  label.textContent = stavka.naziv;
+
+  if (stavka.custom) {
+    // Custom stavka ima X dugme
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "×";
+    delBtn.style.cssText = `
+      background:none; border:none; color:#9ca3af; font-size:16px;
+      cursor:pointer; padding:0 4px; line-height:1;
+    `;
+    delBtn.addEventListener("click", () => {
+      _strukeState[grupa].splice(idx, 1);
+      // Re-render grupe
+      const groupBody = document.getElementById(`strukaGroup_${grupa}`);
+      if (groupBody) {
+        groupBody.innerHTML = "";
+        _strukeState[grupa].forEach((s, i) => {
+          groupBody.appendChild(createStrukaRow(grupa, i, s));
+        });
+      }
+    });
+    row.appendChild(cb);
+    row.appendChild(label);
+    row.appendChild(delBtn);
+  } else {
+    row.appendChild(cb);
+    row.appendChild(label);
+  }
+
+  return row;
+}
+
+function addCustomStavka(grupa, groupBody, addBtn) {
+  // Inline forma za unos naziva
+  const formRow = document.createElement("div");
+  formRow.style.cssText = "display:flex;gap:6px;padding:6px 12px;border-top:1px solid #f3f4f6;";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "Naziv sveske...";
+  input.style.cssText = `
+    flex:1; padding:4px 8px; border:1px solid #93c5fd; border-radius:5px;
+    font-size:12px; outline:none;
+  `;
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.textContent = "Dodaj";
+  confirmBtn.style.cssText = `
+    padding:4px 10px; background:#1d4ed8; color:#fff; border:none;
+    border-radius:5px; font-size:12px; cursor:pointer;
+  `;
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.textContent = "×";
+  cancelBtn.style.cssText = `
+    padding:4px 8px; background:#f3f4f6; border:none;
+    border-radius:5px; font-size:12px; cursor:pointer;
+  `;
+
+  const doAdd = () => {
+    const naziv = input.value.trim();
+    if (!naziv) { input.focus(); return; }
+    _strukeState[grupa].push({ naziv, checked: true, custom: true });
+    groupBody.innerHTML = "";
+    _strukeState[grupa].forEach((s, i) => {
+      groupBody.appendChild(createStrukaRow(grupa, i, s));
+    });
+    formRow.remove();
+  };
+
+  confirmBtn.addEventListener("click", doAdd);
+  cancelBtn.addEventListener("click", () => formRow.remove());
+  input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); if (e.key === "Escape") formRow.remove(); });
+
+  formRow.appendChild(input);
+  formRow.appendChild(confirmBtn);
+  formRow.appendChild(cancelBtn);
+  groupBody.appendChild(formRow);
+  setTimeout(() => input.focus(), 50);
+}
+
+// Otvori templejt iz GitHub-a
+async function openTemplateFromGitHub() {
+  const body = el("githubTemplateBody");
+  const fileName = _pickerSelectedFile.name;
+  const branchId = _pickerSelectedBranch.id;
+
   if (body) {
     body.innerHTML = `
-      <div style="text-align:center; padding:24px; color:#374151;">
-        <div style="font-size:32px; margin-bottom:12px;">⏳</div>
-        <div style="font-weight:600;">Preuzimam templejt...</div>
-        <div style="font-size:12px; color:#6b7280; margin-top:6px;">${fileName}</div>
+      <div style="text-align:center;padding:32px;color:#374151;">
+        <div style="font-size:36px;margin-bottom:12px;">⏳</div>
+        <div style="font-weight:600;font-size:14px;">Preuzimam templejt...</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:6px;">${fileName}</div>
       </div>
     `;
   }
+  el("githubTemplateFooter").innerHTML = "";
 
   try {
     const url = buildGitHubRawUrl(branchId, fileName);
-    console.log("📥 Skidamo templejt:", url);
+    console.log("📥 Skidamo:", url);
 
     const arrayBuffer = await downloadFileContent(url);
 
-    // Otvori u Wordu kao novi dokument
     await Word.run(async (context) => {
-      // Konvertuj ArrayBuffer u Base64
       const uint8Array = new Uint8Array(arrayBuffer);
       let binary = "";
       for (let i = 0; i < uint8Array.length; i++) {
         binary += String.fromCharCode(uint8Array[i]);
       }
       const base64 = btoa(binary);
-
-      // Kreiraj novi dokument iz templejta
       const doc = context.application.createDocument(base64);
       doc.open();
       await context.sync();
     });
 
     closeGitHubTemplateModal();
-    setStatus(`Templejt otvoren: ${fileName}`, "success");
-    console.log("✅ Templejt otvoren:", fileName);
+    setStatus(`Otvoren: ${fileName}`, "success");
+
+    // Ako je Glavna sveska i ima izabranih struka, popuni tagove
+    if (_pickerSelectedFile.isGlavna && window._selectedStruke && window._selectedStruke.length > 0) {
+      setTimeout(() => {
+        setStatus("Popunjavam tabele struka...", "info");
+        fillStrukeTables(window._selectedStruke);
+      }, 1500);
+    }
 
   } catch (error) {
-    console.error("❌ Greška pri otvaranju templejta:", error);
-    setStatus(`Greška pri otvaranju templejta: ${error.message}`, "error");
+    console.error("❌ Greška:", error);
+    setStatus(`Greška: ${error.message}`, "error");
     if (body) {
       body.innerHTML = `
-        <div style="text-align:center; padding:24px; color:#dc2626;">
-          <div style="font-size:32px; margin-bottom:12px;">❌</div>
+        <div style="text-align:center;padding:24px;color:#dc2626;">
+          <div style="font-size:32px;margin-bottom:12px;">❌</div>
           <div style="font-weight:600;">Greška pri preuzimanju</div>
-          <div style="font-size:12px; margin-top:6px;">${error.message}</div>
-          <button onclick="renderGitHubStep1()" style="
-            margin-top:14px; padding:8px 16px; background:#1d4ed8; color:#fff;
-            border:none; border-radius:6px; cursor:pointer;
+          <div style="font-size:12px;margin-top:6px;">${error.message}</div>
+          <button onclick="renderPickerStep1()" style="
+            margin-top:14px;padding:8px 16px;background:#1d4ed8;color:#fff;
+            border:none;border-radius:6px;cursor:pointer;
           ">Pokušaj ponovo</button>
         </div>
       `;
+      setPickerFooter([{ label: "Otkaži", onClick: closeGitHubTemplateModal }]);
     }
   }
 }
+
+// ============================================
+// POPUNJAVANJE STRUKE TABELA U WORD-U
+// ============================================
+
+async function fillStrukeTables(struke) {
+  try {
+    await Word.run(async (context) => {
+      const ccs = context.document.contentControls;
+      ccs.load("items/tag");
+      await context.sync();
+
+      for (const cc of ccs.items) {
+        const tag = (cc.tag || "").trim();
+
+        if (tag === "SVESKE_TABELA") {
+          // Tabela: Broj | Naziv
+          const table = cc.insertTable(struke.length + 1, 2, Word.InsertLocation.replace, []);
+          table.styleBuiltIn = Word.Style.tableGrid;
+          
+          // Header
+          table.getCell(0, 0).value = "Broj sveske";
+          table.getCell(0, 1).value = "Naziv";
+          
+          struke.forEach((s, i) => {
+            table.getCell(i + 1, 0).value = s.oznaka;
+            table.getCell(i + 1, 1).value = s.naziv;
+          });
+
+        } else if (tag === "SVESKE_OPISI") {
+          // Podnaslovi: n.n. NAZIV STRUKE
+          let text = "";
+          struke.forEach((s, i) => {
+            if (i > 0) { // Preskočimo 00 Glavna sveska
+              text += `${i}. ${s.naziv.toUpperCase()}\n\n`;
+            }
+          });
+          cc.insertText(text.trim(), Word.InsertLocation.replace);
+        }
+        // SVESKE_PROJEKTANTI se popunjava ručno
+      }
+
+      await context.sync();
+      setStatus("Tabele struka popunjene!", "success");
+    });
+  } catch (error) {
+    console.error("❌ Greška pri popunjavanju tabela:", error);
+    setStatus("Greška pri popunjavanju tabela struka", "error");
+  }
+}
+
+// ---------- Stare Graph API funkcije (disabled) ----------
+// Stare SharePoint funkcije uklonjene - GitHub mode aktivan
 
 // Fallback: Učitaj templejte iz lokalnog XML-a  
 async function loadTemplatesFromDocument() {
@@ -1974,6 +2223,8 @@ function bindUi() {
   if (btnClear) btnClear.addEventListener("click", clearFieldsKeepControls);
   if (btnDelete) btnDelete.addEventListener("click", deleteControlsAndXml);
   if (btnTemplates) btnTemplates.addEventListener("click", openGitHubTemplateModal);
+  const btnTables = el("btnTables");
+  if (btnTables) btnTables.addEventListener("click", openTabeleModal);
   if (btnExportCSV) btnExportCSV.addEventListener("click", exportCSV);
   if (btnImportCSV) btnImportCSV.addEventListener("click", importCSV);
 
@@ -2108,3 +2359,1034 @@ Office.onReady(async () => {
   
   console.log("✅✅✅ Office.onReady COMPLETED ✅✅✅");
 });
+
+// ============================================
+// TABELE MODULE (V58)
+// Generisanje tabela u Glavnoj svesci
+// ============================================
+
+// Definicija svih struka sa prefiksom za naziv u dokumentu
+const TABELE_STRUKE = [
+  // Grupa 01 - Arhitektura
+  { oznaka: "01",   naziv: "ARHITEKTURA",                                    grupa: "01", grupaNaziv: "Arhitektura",             tip: "projekat" },
+  // Grupa 02 - Konstrukcija
+  { oznaka: "02",   naziv: "KONSTRUKCIJA",                                   grupa: "02", grupaNaziv: "Konstrukcija",            tip: "projekat" },
+  { oznaka: "02",   naziv: "SAOBRAĆAJNA KONSTRUKCIJA",                       grupa: "02", grupaNaziv: "Konstrukcija",            tip: "projekat" },
+  // Grupa 03 - Hidro
+  { oznaka: "03",   naziv: "HIDROTEHNIČKE INSTALACIJE",                      grupa: "03", grupaNaziv: "Hidrotehničke inst.",      tip: "projekat" },
+  // Grupa 04 - Elektro
+  { oznaka: "04",   naziv: "ELEKTROENERGETSKE INSTALACIJE",                  grupa: "04", grupaNaziv: "Elektroenergetika",       tip: "projekat" },
+  { oznaka: "04",   naziv: "TRAFO STANICA",                                  grupa: "04", grupaNaziv: "Elektroenergetika",       tip: "projekat" },
+  // Grupa 05 - Signalne
+  { oznaka: "05",   naziv: "SIGNALNE INSTALACIJE",                           grupa: "05", grupaNaziv: "Signalne inst.",          tip: "projekat" },
+  { oznaka: "05",   naziv: "STABILNI SISTEM ZA DOJAVU POŽARA",               grupa: "05", grupaNaziv: "Signalne inst.",          tip: "projekat" },
+  { oznaka: "05",   naziv: "VIDEO NADZOR",                                   grupa: "05", grupaNaziv: "Signalne inst.",          tip: "projekat" },
+  // Grupa 06 - Mašinske
+  { oznaka: "06",   naziv: "TERMOTEHNIČKE INSTALACIJE",                      grupa: "06", grupaNaziv: "Mašinske inst.",          tip: "projekat" },
+  { oznaka: "06",   naziv: "PUTNIČKI LIFT",                                  grupa: "06", grupaNaziv: "Mašinske inst.",          tip: "projekat" },
+  { oznaka: "06",   naziv: "AUTOLIFT",                                       grupa: "06", grupaNaziv: "Mašinske inst.",          tip: "projekat" },
+  { oznaka: "06",   naziv: "STABILNI SISTEM ZA GAŠENJE POŽARA",              grupa: "06", grupaNaziv: "Mašinske inst.",          tip: "projekat" },
+  { oznaka: "06",   naziv: "VENTILACIJA I NADPRITISAK GARAŽE",               grupa: "06", grupaNaziv: "Mašinske inst.",          tip: "projekat" },
+  // Grupa 07
+  { oznaka: "07",   naziv: "TEHNOLOGIJA",                                    grupa: "07", grupaNaziv: "Tehnologija",             tip: "projekat" },
+  // Grupa 08
+  { oznaka: "08",   naziv: "SAOBRAĆAJ I SAOBRAĆAJNA SIGNALIZACIJA",         grupa: "08", grupaNaziv: "Saobraćaj",              tip: "projekat" },
+  // Grupa 09
+  { oznaka: "09",   naziv: "SPOLJNO UREĐENJE",                               grupa: "09", grupaNaziv: "Spoljno uređenje",       tip: "projekat" },
+  // Grupa 10
+  { oznaka: "10",   naziv: "PRIPREMNI RADOVI - PROJEKAT RUŠENJA",            grupa: "10", grupaNaziv: "Pripremni radovi",       tip: "projekat" },
+  { oznaka: "10",   naziv: "PRIPREMNI RADOVI - PROJEKAT OBEZBEĐENJA TEMELJNE JAME", grupa: "10", grupaNaziv: "Pripremni radovi", tip: "projekat" },
+  // Elaborati (posebna grupa - nemaju podbroj, uvek singularni)
+  { oznaka: "EE",   naziv: "ELABORAT ENERGETSKE EFIKASNOSTI",                grupa: "EE",   grupaNaziv: "Elaborat EE",          tip: "elaborat" },
+  { oznaka: "GEO",  naziv: "ELABORAT O GEOTEHNIČKIM USLOVIMA IZRADE PGD",   grupa: "GEO",  grupaNaziv: "Elaborat GEO",         tip: "elaborat" },
+  { oznaka: "EZOP", naziv: "ELABORAT ZAŠTITE OD POŽARA",                    grupa: "EZOP", grupaNaziv: "Elaborat EZOP",        tip: "elaborat" },
+];
+
+// Oznaka 0.8 NASLOVI - mapiranje oznake -> naziv poglavlja opisnog teksta
+const TABELE_08_NAZIVI = {
+  "01":   "ARHITEKTONSKI OPIS",
+  "02":   "OPIS KONSTRUKCIJE",
+  "03":   "OPIS HIDROTEHNIČKIH INSTALACIJA",
+  "04":   "OPIS ELEKTROENERGETSKIH INSTALACIJA",
+  "05":   "OPIS SIGNALNIH INSTALACIJA",
+  "06":   "OPIS MAŠINSKIH INSTALACIJA",
+  "07":   "OPIS TEHNOLOGIJE",
+  "08":   "OPIS SAOBRAĆAJA I SAOBRAĆAJNE SIGNALIZACIJE",
+  "09":   "OPIS SPOLJNOG UREĐENJA",
+  "10":   "OPIS PRIPREMNIH RADOVA",
+  "EE":   "ELABORAT ENERGETSKE EFIKASNOSTI",
+  "GEO":  "ELABORAT O GEOTEHNIČKIM USLOVIMA",
+  "EZOP": "ELABORAT ZAŠTITE OD POŽARA",
+};
+
+// State za tabele modal
+let _tabeleStrukeState = {}; 
+// Format: { grupa: [ { naziv, checked, custom, id } ] }
+
+// Computed rezultat - lista izabranih svezaka sa konačnim oznakama
+// [ { oznaka: "06.1", naziv: "TERMOTEHNIČKE INSTALACIJE", tip: "projekat"|"elaborat" } ]
+let _tabeleSveske = [];
+
+// ---- Inicijalizacija state-a ----
+function initTabeleState() {
+  _tabeleStrukeState = {};
+
+  const grupe = {};
+  for (const s of TABELE_STRUKE) {
+    if (!grupe[s.grupa]) grupe[s.grupa] = [];
+    grupe[s.grupa].push({
+      id: crypto.randomUUID(),
+      naziv: s.naziv,
+      checked: false,
+      custom: false,
+      tip: s.tip,
+      grupaNaziv: s.grupaNaziv,
+    });
+  }
+  _tabeleStrukeState = grupe;
+}
+
+// ---- Izračunaj finalne oznake ----
+function computeTabeleOznake() {
+  const result = [];
+
+  // Uvek prva: Glavna sveska
+  result.push({ oznaka: "0", naziv: "GLAVNA SVESKA", tip: "glavna" });
+
+  for (const [grupa, stavke] of Object.entries(_tabeleStrukeState)) {
+    const checked = stavke.filter(s => s.checked);
+    if (checked.length === 0) continue;
+
+    const isElaborat = checked[0].tip === "elaborat";
+
+    if (isElaborat || checked.length === 1) {
+      // Elaborati i singularni projekti → samo oznaka grupe bez podbrojeva
+      result.push({
+        oznaka: grupa,
+        naziv: checked[0].naziv,
+        tip: checked[0].tip,
+      });
+    } else {
+      // Više u grupi → grupa.1, grupa.2...
+      checked.forEach((s, i) => {
+        result.push({
+          oznaka: `${grupa}.${i + 1}`,
+          naziv: s.naziv,
+          tip: s.tip,
+        });
+      });
+    }
+  }
+
+  return result;
+}
+
+// ---- Tag za placeholder tabele u Word-u ----
+// Format: BA_TABLE|type=04   (za tabelu 0.4)
+//         BA_TABLE|type=05
+//         BA_TABLE|type=061
+//         BA_TABLE|type=062
+//         BA_TABLE|type=08
+function makeTableTag(type) {
+  return `BA_TABLE|type=${type}`;
+}
+
+// ============================================
+// MODAL - Otvaranje i zatvaranje
+// ============================================
+
+function openTabeleModal() {
+  // Kreira backdrop + modal dinamički ako ne postoje
+  let backdrop = el("tabeleBackdrop");
+  if (!backdrop) {
+    backdrop = document.createElement("div");
+    backdrop.id = "tabeleBackdrop";
+    backdrop.style.cssText = `
+      position:fixed; inset:0; background:rgba(0,0,0,0.5);
+      z-index:1000; display:flex; align-items:center; justify-content:center;
+    `;
+    backdrop.addEventListener("click", e => {
+      if (e.target === backdrop) closeTabeleModal();
+    });
+
+    const modal = document.createElement("div");
+    modal.id = "tabeleModal";
+    modal.style.cssText = `
+      background:#fff; border-radius:12px; width:520px; max-width:97vw;
+      max-height:92vh; display:flex; flex-direction:column;
+      box-shadow:0 8px 32px rgba(0,0,0,0.2);
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    `;
+
+    const header = document.createElement("div");
+    header.id = "tabeleHeader";
+    header.style.cssText = `
+      background:#1d4ed8; color:#fff; padding:14px 18px;
+      display:flex; align-items:center; justify-content:space-between;
+      border-radius:12px 12px 0 0; flex-shrink:0;
+    `;
+
+    const body = document.createElement("div");
+    body.id = "tabeleBody";
+    body.style.cssText = "padding:18px; overflow-y:auto; flex:1; min-height:0;";
+
+    const footer = document.createElement("div");
+    footer.id = "tabeleFooter";
+    footer.style.cssText = `
+      padding:12px 18px; border-top:1px solid #e5e7eb;
+      display:flex; gap:8px; justify-content:flex-end; flex-shrink:0;
+    `;
+
+    modal.appendChild(header);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+  }
+
+  initTabeleState();
+  renderTabeleStep1();
+  el("tabeleBackdrop").style.display = "flex";
+}
+
+function closeTabeleModal() {
+  const backdrop = el("tabeleBackdrop");
+  if (backdrop) backdrop.style.display = "none";
+}
+
+// ---- Header / Footer helpers ----
+function setTabeleHeader(title, showBack, onBack) {
+  const header = el("tabeleHeader");
+  if (!header) return;
+  header.innerHTML = `
+    <div style="display:flex; align-items:center; gap:10px;">
+      ${showBack
+        ? `<button id="tabeleBackBtn" style="background:rgba(255,255,255,0.2);border:none;color:#fff;
+            font-size:16px;cursor:pointer;border-radius:4px;padding:2px 8px;">←</button>`
+        : ""}
+      <span style="font-weight:700; font-size:15px;">🗂️ ${title}</span>
+    </div>
+    <button id="tabeleCloseBtn" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1;">×</button>
+  `;
+  el("tabeleCloseBtn").addEventListener("click", closeTabeleModal);
+  if (showBack) el("tabeleBackBtn").addEventListener("click", onBack);
+}
+
+function setTabeleFooter(buttons) {
+  const footer = el("tabeleFooter");
+  if (!footer) return;
+  footer.innerHTML = "";
+  buttons.forEach(b => {
+    const btn = document.createElement("button");
+    btn.textContent = b.label;
+    btn.disabled = b.disabled || false;
+    btn.style.cssText = b.primary
+      ? `padding:9px 22px;background:#1d4ed8;color:#fff;border:none;border-radius:7px;
+         cursor:pointer;font-size:13px;font-weight:600;transition:all 0.15s;`
+      : `padding:9px 18px;border:1px solid #d1d5db;border-radius:7px;background:#fff;
+         cursor:pointer;font-size:13px;color:#374151;transition:all 0.15s;`;
+    if (b.disabled) btn.style.opacity = "0.5";
+    btn.addEventListener("click", b.onClick);
+    if (b.id) btn.id = b.id;
+    footer.appendChild(btn);
+  });
+}
+
+// ============================================
+// KORAK 1 - Izbor svezaka
+// ============================================
+
+function renderTabeleStep1() {
+  setTabeleHeader("Izaberi sveske projekta", false, null);
+  const body = el("tabeleBody");
+  body.innerHTML = "";
+
+  // Info box
+  const info = document.createElement("div");
+  info.className = "info-box";
+  info.innerHTML = `
+    Izaberi koje sveske (projekti/elaborati) postoje u ovom projektu.<br>
+    <strong>Glavna sveska (0)</strong> se uvek uključuje automatski.<br>
+    Grupe sa više izabranih stavki dobijaju podbroj: <strong>06.1, 06.2...</strong>
+  `;
+  body.appendChild(info);
+
+  // Grupe svezaka
+  const grid = document.createElement("div");
+  grid.className = "sveske-grid";
+
+  const grupeRedosled = ["01","02","03","04","05","06","07","08","09","10","EE","GEO","EZOP"];
+
+  for (const grupa of grupeRedosled) {
+    const stavke = _tabeleStrukeState[grupa];
+    if (!stavke || stavke.length === 0) continue;
+
+    const protoStavka = TABELE_STRUKE.find(s => s.grupa === grupa);
+    const grupaNaziv = protoStavka ? protoStavka.grupaNaziv : grupa;
+    const tipGrupe = protoStavka ? protoStavka.tip : "projekat";
+
+    const block = document.createElement("div");
+    block.className = "struka-group-block";
+    block.id = `tabGrupa_${grupa}`;
+
+    const ghdr = document.createElement("div");
+    ghdr.className = "struka-group-header";
+    ghdr.innerHTML = `
+      <span class="oznaka-badge">${grupa}</span>
+      <span>${grupaNaziv}</span>
+      ${tipGrupe === "elaborat"
+        ? `<span style="margin-left:auto;background:#fef3c7;color:#92400e;padding:1px 7px;
+             border-radius:4px;font-size:10px;font-weight:600;">elaborat</span>`
+        : ""}
+    `;
+    block.appendChild(ghdr);
+
+    const gbody = document.createElement("div");
+    gbody.id = `tabGrupaBody_${grupa}`;
+
+    stavke.forEach((s, idx) => {
+      gbody.appendChild(makeStrukaCheckRow(grupa, idx, s));
+    });
+
+    block.appendChild(gbody);
+
+    // Dugme za dodavanje custom sveske (samo za projekte, ne elaborate)
+    if (tipGrupe === "projekat") {
+      const addWrap = document.createElement("div");
+      addWrap.className = "add-custom-row";
+      const addBtn = document.createElement("button");
+      addBtn.className = "add-custom-btn";
+      addBtn.textContent = "+ Dodaj svesku u grupu";
+      addBtn.addEventListener("click", () => {
+        showAddCustomForm(grupa, gbody, addWrap);
+      });
+      addWrap.appendChild(addBtn);
+      block.appendChild(addWrap);
+    }
+
+    grid.appendChild(block);
+  }
+
+  body.appendChild(grid);
+
+  setTabeleFooter([
+    { label: "Otkaži", onClick: closeTabeleModal },
+    {
+      label: "Sledeće: Pregled →",
+      primary: true,
+      id: "tabeleNextBtn",
+      onClick: () => {
+        _tabeleSveske = computeTabeleOznake();
+        renderTabeleStep2();
+      }
+    }
+  ]);
+}
+
+function makeStrukaCheckRow(grupa, idx, stavka) {
+  const row = document.createElement("div");
+  row.className = "struka-row";
+  row.id = `tabRow_${stavka.id}`;
+
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.id = `tabCb_${stavka.id}`;
+  cb.checked = stavka.checked;
+  cb.addEventListener("change", () => {
+    _tabeleStrukeState[grupa][idx].checked = cb.checked;
+  });
+
+  const lbl = document.createElement("label");
+  lbl.htmlFor = `tabCb_${stavka.id}`;
+  lbl.innerHTML = `<span class="naziv-tekst">${stavka.naziv}</span>`;
+  if (stavka.custom) {
+    lbl.style.fontStyle = "italic";
+  }
+
+  if (stavka.custom) {
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "×";
+    delBtn.title = "Ukloni";
+    delBtn.style.cssText = `background:none;border:none;color:#9ca3af;font-size:16px;cursor:pointer;padding:0 4px;line-height:1;`;
+    delBtn.addEventListener("click", () => {
+      _tabeleStrukeState[grupa].splice(idx, 1);
+      reRenderGrupaBody(grupa);
+    });
+    row.appendChild(cb);
+    row.appendChild(lbl);
+    row.appendChild(delBtn);
+  } else {
+    row.appendChild(cb);
+    row.appendChild(lbl);
+  }
+
+  return row;
+}
+
+function reRenderGrupaBody(grupa) {
+  const gbody = el(`tabGrupaBody_${grupa}`);
+  if (!gbody) return;
+  gbody.innerHTML = "";
+  (_tabeleStrukeState[grupa] || []).forEach((s, i) => {
+    gbody.appendChild(makeStrukaCheckRow(grupa, i, s));
+  });
+}
+
+function showAddCustomForm(grupa, gbody, addWrap) {
+  // Sakrij dugme privremeno
+  addWrap.style.display = "none";
+
+  const formRow = document.createElement("div");
+  formRow.style.cssText = "display:flex;gap:6px;padding:5px 12px 8px;";
+
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.placeholder = "Naziv sveske (npr. HIDRANTSKA MREŽA)...";
+  inp.style.cssText = `flex:1;padding:5px 8px;border:1px solid #93c5fd;border-radius:5px;
+    font-size:12px;outline:none;font-family:inherit;`;
+
+  const okBtn = document.createElement("button");
+  okBtn.textContent = "Dodaj";
+  okBtn.style.cssText = `padding:5px 12px;background:#1d4ed8;color:#fff;border:none;
+    border-radius:5px;font-size:12px;cursor:pointer;`;
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.textContent = "×";
+  cancelBtn.style.cssText = `padding:5px 9px;background:#f3f4f6;border:none;
+    border-radius:5px;font-size:12px;cursor:pointer;`;
+
+  const doAdd = () => {
+    const naziv = inp.value.trim().toUpperCase();
+    if (!naziv) { inp.focus(); return; }
+    _tabeleStrukeState[grupa].push({
+      id: crypto.randomUUID(),
+      naziv,
+      checked: true,
+      custom: true,
+      tip: "projekat",
+    });
+    reRenderGrupaBody(grupa);
+    formRow.remove();
+    addWrap.style.display = "";
+  };
+
+  okBtn.addEventListener("click", doAdd);
+  cancelBtn.addEventListener("click", () => {
+    formRow.remove();
+    addWrap.style.display = "";
+  });
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter") doAdd();
+    if (e.key === "Escape") { formRow.remove(); addWrap.style.display = ""; }
+  });
+
+  formRow.appendChild(inp);
+  formRow.appendChild(okBtn);
+  formRow.appendChild(cancelBtn);
+  gbody.parentElement.insertBefore(formRow, addWrap);
+  setTimeout(() => inp.focus(), 50);
+}
+
+// ============================================
+// KORAK 2 - Pregled i potvrda
+// ============================================
+
+function renderTabeleStep2() {
+  setTabeleHeader("Pregled tabela", true, renderTabeleStep1);
+  const body = el("tabeleBody");
+  body.innerHTML = "";
+
+  // Filtriraj samo izabrane (bez glavne sveske koja je uvek tu)
+  const izabrane = _tabeleSveske.filter(s => s.tip !== "glavna");
+  const projekti = _tabeleSveske.filter(s => s.tip === "projekat");
+  const elaborati = _tabeleSveske.filter(s => s.tip === "elaborat");
+
+  if (izabrane.length === 0) {
+    body.innerHTML = `
+      <div style="text-align:center;padding:40px 20px;color:#9ca3af;">
+        <div style="font-size:40px;margin-bottom:10px;">⚠️</div>
+        <div style="font-weight:600;color:#374151;">Nijedna sveska nije izabrana</div>
+        <div style="font-size:12px;margin-top:6px;">Vrati se i izaberi bar jednu svesku projekta.</div>
+      </div>`;
+    setTabeleFooter([
+      { label: "← Nazad", onClick: renderTabeleStep1 },
+      { label: "Otkaži", onClick: closeTabeleModal }
+    ]);
+    return;
+  }
+
+  // Info
+  const info = document.createElement("div");
+  info.className = "info-box";
+  info.innerHTML = `
+    Izabrano je <strong>${izabrane.length}</strong> svezaka.<br>
+    Klikni <strong>Generiši tabele</strong> da se Word placeholder tabele popune redovima.<br>
+    <span style="color:#6b7280;font-size:11px;">
+      Placeholder tabele moraju imati tag: <code>BA_TABLE|type=04</code> itd.
+    </span>
+  `;
+  body.appendChild(info);
+
+  // Preview tabele 0.4 i 0.5
+  body.appendChild(makePreviewTabela04_05(_tabeleSveske));
+
+  // Preview tabele 0.6.1 (samo projekti, bez elaborata)
+  if (projekti.length > 0) {
+    body.appendChild(makePreviewTabela061(projekti));
+  }
+
+  // Preview tabele 0.6.2 (samo elaborati)
+  if (elaborati.length > 0) {
+    body.appendChild(makePreviewTabela062(elaborati));
+  }
+
+  // Preview 0.8 naslovi
+  body.appendChild(makePreview08(_tabeleSveske));
+
+  setTabeleFooter([
+    { label: "← Nazad", onClick: renderTabeleStep1 },
+    { label: "Otkaži", onClick: closeTabeleModal },
+    {
+      label: "✅ Generiši tabele u Word-u",
+      primary: true,
+      id: "tabeleGenerisiBtn",
+      onClick: () => generisiTabele()
+    }
+  ]);
+}
+
+function makePreviewTabela04_05(sveske) {
+  const wrap = document.createElement("div");
+  wrap.style.marginBottom = "14px";
+
+  const title = document.createElement("div");
+  title.style.cssText = "font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;";
+  title.textContent = "Tabele 0.4 i 0.5 (Izjava + Sadržaj tehničke dokumentacije)";
+  wrap.appendChild(title);
+
+  const table = document.createElement("div");
+  table.className = "table-preview";
+
+  const hdr = document.createElement("div");
+  hdr.className = "table-preview-header";
+  hdr.textContent = "0.4 / 0.5 — Br. sveske | Naziv | Br. licence (prazno)";
+  table.appendChild(hdr);
+
+  const tbl = document.createElement("table");
+  const thead = tbl.insertRow();
+  thead.style.background = "#f3f4f6";
+  [["Br.", "40px"], ["Naziv sveske", "auto"], ["Br. licence", "90px"]].forEach(([t, w]) => {
+    const th = document.createElement("th");
+    th.textContent = t;
+    th.style.width = w;
+    thead.appendChild(th);
+  });
+
+  sveske.forEach(s => {
+    const tr = tbl.insertRow();
+    const td1 = tr.insertCell(); td1.textContent = s.oznaka; td1.className = "auto-col";
+    const td2 = tr.insertCell(); td2.textContent = `PROJEKAT ${s.naziv}`; td2.className = "auto-col";
+    const td3 = tr.insertCell(); td3.textContent = "..."; td3.className = "empty-col";
+  });
+
+  table.appendChild(tbl);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function makePreviewTabela061(projekti) {
+  const wrap = document.createElement("div");
+  wrap.style.marginBottom = "14px";
+
+  const title = document.createElement("div");
+  title.style.cssText = "font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;";
+  title.textContent = "Tabela 0.6.1 (Podaci o projektantima)";
+  wrap.appendChild(title);
+
+  const table = document.createElement("div");
+  table.className = "table-preview";
+
+  const hdr = document.createElement("div");
+  hdr.className = "table-preview-header";
+  hdr.textContent = "0.6.1 — Leva kolona (auto) | Desna kolona (prazno za unos)";
+  table.appendChild(hdr);
+
+  const tbl = document.createElement("table");
+  const thr = tbl.insertRow();
+  thr.style.background = "#f3f4f6";
+  const thL = document.createElement("th"); thL.textContent = "Leva kolona (auto)"; thr.appendChild(thL);
+  const thR = document.createElement("th"); thR.textContent = "Desna kolona (ručno)"; thr.appendChild(thR);
+
+  projekti.forEach(s => {
+    // Blok od 4 reda po svesci
+    const blokNaziv = `${s.oznaka}. PROJEKAT ${s.naziv}`;
+    const redovi = [
+      { l: blokNaziv, r: "" },
+      { l: "Projektant:", r: "..." },
+      { l: "Broj licence:", r: "..." },
+      { l: "Potpis:", r: "" },
+    ];
+    redovi.forEach(r => {
+      const tr = tbl.insertRow();
+      const tdL = tr.insertCell(); tdL.className = "auto-col"; tdL.textContent = r.l;
+      const tdR = tr.insertCell(); tdR.textContent = r.r; tdR.className = r.r ? "empty-col" : "";
+    });
+  });
+
+  table.appendChild(tbl);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function makePreviewTabela062(elaborati) {
+  const wrap = document.createElement("div");
+  wrap.style.marginBottom = "14px";
+
+  const title = document.createElement("div");
+  title.style.cssText = "font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;";
+  title.textContent = "Tabela 0.6.2 (Podaci o licima za elaborate)";
+  wrap.appendChild(title);
+
+  const table = document.createElement("div");
+  table.className = "table-preview";
+
+  const hdr = document.createElement("div");
+  hdr.className = "table-preview-header";
+  hdr.textContent = "0.6.2 — Elaborati (Izrađivač, Ovlašćeno lice, Br. ovlašćenja, Potpis)";
+  table.appendChild(hdr);
+
+  const tbl = document.createElement("table");
+  const thr = tbl.insertRow();
+  thr.style.background = "#f3f4f6";
+  const thL = document.createElement("th"); thL.textContent = "Naziv elaborata + labele"; thr.appendChild(thL);
+  const thR = document.createElement("th"); thR.textContent = "Vrednost (ručno)"; thr.appendChild(thR);
+
+  elaborati.forEach(s => {
+    const blokNaziv = `${s.naziv}:`;
+    [
+      { l: blokNaziv, r: "" },
+      { l: "Izrađivač:", r: "..." },
+      { l: "Ovlašćeno lice:", r: "..." },
+      { l: "Broj ovlašćenja:", r: "..." },
+      { l: "Potpis:", r: "" },
+    ].forEach(r => {
+      const tr = tbl.insertRow();
+      const tdL = tr.insertCell(); tdL.className = "auto-col"; tdL.textContent = r.l;
+      const tdR = tr.insertCell(); tdR.textContent = r.r; tdR.className = r.r ? "empty-col" : "";
+    });
+  });
+
+  table.appendChild(tbl);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function makePreview08(sveske) {
+  const wrap = document.createElement("div");
+  wrap.style.marginBottom = "14px";
+
+  const title = document.createElement("div");
+  title.style.cssText = "font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;";
+  title.textContent = "Naslovi 0.8 (Sažet tehnički opis)";
+  wrap.appendChild(title);
+
+  const table = document.createElement("div");
+  table.className = "table-preview";
+
+  const hdr = document.createElement("div");
+  hdr.className = "table-preview-header";
+  hdr.textContent = "0.8 — Naslovi poglavlja opisnog dela";
+  table.appendChild(hdr);
+
+  const tbl = document.createElement("table");
+  const thr = tbl.insertRow();
+  thr.style.background = "#f3f4f6";
+  const th = document.createElement("th"); th.textContent = "Naslov"; thr.appendChild(th);
+
+  // Grupiši - jedan naslov po grupi (ne po podbroju)
+  const vidjenePrije = new Set();
+  let rbr = 1;
+  sveske.forEach(s => {
+    if (s.tip === "glavna") return;
+    const oznakaGrupe = s.oznaka.includes(".") ? s.oznaka.split(".")[0] : s.oznaka;
+    if (vidjenePrije.has(oznakaGrupe)) return;
+    vidjenePrije.add(oznakaGrupe);
+
+    const naslovTekst = TABELE_08_NAZIVI[oznakaGrupe] || s.naziv;
+    const tr = tbl.insertRow();
+    const td = tr.insertCell();
+    td.className = "auto-col";
+    td.textContent = `0.8.${rbr}. ${naslovTekst}`;
+    rbr++;
+  });
+
+  table.appendChild(tbl);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+// ============================================
+// GENERISANJE TABELA U WORD-U
+// ============================================
+
+async function generisiTabele() {
+  const btn = el("tabeleGenerisiBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ Generiše se..."; }
+
+  try {
+    const sveske = _tabeleSveske;
+    const projekti = sveske.filter(s => s.tip !== "glavna" && s.tip !== "elaborat");
+    const elaborati = sveske.filter(s => s.tip === "elaborat");
+
+    let ukupnoTabela = 0;
+
+    await Word.run(async (context) => {
+      // Učitaj sve tabele u dokumentu
+      const tables = context.document.body.tables;
+      tables.load("items");
+      await context.sync();
+
+      // Učitaj content controls za svaku tabelu
+      for (const table of tables.items) {
+        table.load("rowCount,rows/items/cells/items/body/text");
+      }
+
+      // Učitaj sve content controls u dokumentu da nađemo tagove
+      const ccs = context.document.contentControls;
+      ccs.load("items/tag,items/tables");
+      await context.sync();
+
+      // Nađi content control-e sa BA_TABLE tagom i generiši tabele
+      for (const cc of ccs.items) {
+        const tag = cc.tag || "";
+        if (!tag.startsWith("BA_TABLE|")) continue;
+
+        // Parsiranje tipa
+        const m = tag.match(/type=(\w+)/);
+        if (!m) continue;
+        const tip = m[1];
+
+        cc.load("tables");
+        await context.sync();
+
+        const ccTables = cc.tables;
+        ccTables.load("items");
+        await context.sync();
+
+        if (ccTables.items.length === 0) continue;
+        const table = ccTables.items[0];
+
+        // ---- TABELA 04 i 05 ----
+        if (tip === "04" || tip === "05") {
+          await generisiTabelu0405(context, table, sveske, tip);
+          ukupnoTabela++;
+        }
+        // ---- TABELA 061 ----
+        else if (tip === "061") {
+          await generisiTabelu061(context, table, projekti);
+          ukupnoTabela++;
+        }
+        // ---- TABELA 062 ----
+        else if (tip === "062") {
+          await generisiTabelu062(context, table, elaborati);
+          ukupnoTabela++;
+        }
+        // ---- NASLOVI 08 ----
+        else if (tip === "08") {
+          await generisiNaslove08(context, cc, sveske);
+          ukupnoTabela++;
+        }
+      }
+
+      await context.sync();
+    });
+
+    if (ukupnoTabela === 0) {
+      setStatus("⚠️ Nisu nađene placeholder tabele. Dodaj content controls sa BA_TABLE tagovima.", "warn");
+    } else {
+      setStatus(`✅ Generisano ${ukupnoTabela} tabele/a u dokumentu.`, "success");
+    }
+
+    closeTabeleModal();
+
+  } catch (err) {
+    console.error("❌ Greška pri generisanju tabela:", err);
+    setStatus("Greška pri generisanju tabela. Vidi konzolu.", "error");
+    if (btn) { btn.disabled = false; btn.textContent = "✅ Generiši tabele u Word-u"; }
+  }
+}
+
+// ---- Generisanje tabele 0.4 i 0.5 ----
+// Struktura: 3 kolone - oznaka | naziv | br. licence (prazno)
+async function generisiTabelu0405(context, table, sveske, tip) {
+  table.load("rowCount,rows/items");
+  await context.sync();
+
+  // Odredi ciljni broj redova (header red + po jedan za svaku svesku)
+  const headerRows = 0; // nema header reda - cela tabela su podaci
+  const targetRows = sveske.length;
+  const currentRows = table.rowCount;
+
+  // Dodaj redove ako treba
+  if (currentRows < targetRows) {
+    for (let i = currentRows; i < targetRows; i++) {
+      table.addRows(Word.InsertLocation.end, 1);
+    }
+    await context.sync();
+    table.load("rows/items");
+    await context.sync();
+  }
+
+  // Upiši sadržaj u svaki red
+  const rows = table.rows;
+  rows.load("items");
+  await context.sync();
+
+  for (let i = 0; i < sveske.length; i++) {
+    const sv = sveske[i];
+    if (i >= rows.items.length) break;
+
+    const row = rows.items[i];
+    row.load("cells/items");
+    await context.sync();
+
+    const cells = row.cells.items;
+    if (cells.length < 2) continue;
+
+    // Ćelija 0: oznaka
+    cells[0].body.clear();
+    cells[0].body.insertText(sv.oznaka, Word.InsertLocation.start);
+
+    // Ćelija 1: naziv
+    const nazivTekst = sv.tip === "glavna"
+      ? "GLAVNA SVESKA"
+      : `PROJEKAT ${sv.naziv}`;
+    cells[1].body.clear();
+    cells[1].body.insertText(nazivTekst, Word.InsertLocation.start);
+
+    // Ćelija 2: prazna (za ručni unos)
+    if (cells.length > 2) {
+      cells[2].body.clear();
+    }
+  }
+
+  // Obrisi višak redova odozdo (od kraja da ne bude pomeranja indeksa)
+  if (currentRows > targetRows) {
+    for (let i = currentRows - 1; i >= targetRows; i--) {
+      const row = table.rows.items[i];
+      if (row) row.delete();
+    }
+    await context.sync();
+  }
+
+  await context.sync();
+  console.log(`✅ Tabela ${tip} generisana: ${sveske.length} redova`);
+}
+
+// ---- Generisanje tabele 0.6.1 ----
+// Struktura: 2 kolone, za svaki projekat blok od 4 reda:
+//   Red 1: "X. PROJEKAT NAZIV" | ""
+//   Red 2: "Projektant:" | ""
+//   Red 3: "Broj licence:" | ""
+//   Red 4: "Potpis:" | ""
+async function generisiTabelu061(context, table, projekti) {
+  if (projekti.length === 0) return;
+
+  const targetRows = projekti.length * 4;
+
+  table.load("rowCount");
+  await context.sync();
+
+  const currentRows = table.rowCount;
+
+  // Dodaj redove
+  if (currentRows < targetRows) {
+    for (let i = currentRows; i < targetRows; i++) {
+      table.addRows(Word.InsertLocation.end, 1);
+    }
+    await context.sync();
+  }
+
+  table.load("rows/items");
+  await context.sync();
+
+  for (let pi = 0; pi < projekti.length; pi++) {
+    const sv = projekti[pi];
+    const baseRow = pi * 4;
+
+    const redSadrzaji = [
+      `${sv.oznaka}. PROJEKAT ${sv.naziv}`,
+      "Projektant:",
+      "Broj licence:",
+      "Potpis:",
+    ];
+
+    for (let ri = 0; ri < 4; ri++) {
+      const rowIdx = baseRow + ri;
+      if (rowIdx >= table.rows.items.length) break;
+
+      const row = table.rows.items[rowIdx];
+      row.load("cells/items");
+      await context.sync();
+
+      const cells = row.cells.items;
+      if (cells.length < 1) continue;
+
+      // Leva kolona - automatski sadržaj
+      cells[0].body.clear();
+      cells[0].body.insertText(redSadrzaji[ri], Word.InsertLocation.start);
+
+      // Desna kolona - prazan prostor
+      if (cells.length > 1) {
+        cells[1].body.clear();
+      }
+    }
+  }
+
+  // Obrisi višak redova
+  if (currentRows > targetRows) {
+    table.load("rows/items");
+    await context.sync();
+    for (let i = currentRows - 1; i >= targetRows; i--) {
+      if (table.rows.items[i]) table.rows.items[i].delete();
+    }
+    await context.sync();
+  }
+
+  await context.sync();
+  console.log(`✅ Tabela 0.6.1 generisana: ${projekti.length} projektanata, ${targetRows} redova`);
+}
+
+// ---- Generisanje tabele 0.6.2 ----
+// Za svaki elaborat blok od 5 redova:
+//   Red 1: "NAZIV ELABORATA:" | ""
+//   Red 2: "Izrađivač:" | ""
+//   Red 3: "Ovlašćeno lice:" | ""
+//   Red 4: "Broj ovlašćenja:" | ""
+//   Red 5: "Potpis:" | ""
+async function generisiTabelu062(context, table, elaborati) {
+  if (elaborati.length === 0) return;
+
+  const targetRows = elaborati.length * 5;
+
+  table.load("rowCount");
+  await context.sync();
+
+  const currentRows = table.rowCount;
+
+  if (currentRows < targetRows) {
+    for (let i = currentRows; i < targetRows; i++) {
+      table.addRows(Word.InsertLocation.end, 1);
+    }
+    await context.sync();
+  }
+
+  table.load("rows/items");
+  await context.sync();
+
+  for (let ei = 0; ei < elaborati.length; ei++) {
+    const sv = elaborati[ei];
+    const baseRow = ei * 5;
+
+    const redSadrzaji = [
+      `${sv.naziv}:`,
+      "Izrađivač:",
+      "Ovlašćeno lice:",
+      "Broj ovlašćenja:",
+      "Potpis:",
+    ];
+
+    for (let ri = 0; ri < 5; ri++) {
+      const rowIdx = baseRow + ri;
+      if (rowIdx >= table.rows.items.length) break;
+
+      const row = table.rows.items[rowIdx];
+      row.load("cells/items");
+      await context.sync();
+
+      const cells = row.cells.items;
+      if (cells.length < 1) continue;
+
+      cells[0].body.clear();
+      cells[0].body.insertText(redSadrzaji[ri], Word.InsertLocation.start);
+
+      if (cells.length > 1) {
+        cells[1].body.clear();
+      }
+    }
+  }
+
+  if (currentRows > targetRows) {
+    table.load("rows/items");
+    await context.sync();
+    for (let i = currentRows - 1; i >= targetRows; i--) {
+      if (table.rows.items[i]) table.rows.items[i].delete();
+    }
+    await context.sync();
+  }
+
+  await context.sync();
+  console.log(`✅ Tabela 0.6.2 generisana: ${elaborati.length} elaborata, ${targetRows} redova`);
+}
+
+// ---- Generisanje naslova 0.8 ----
+// Briše sadržaj CC-a i upisuje naslove kao paragrafe
+async function generisiNaslove08(context, cc, sveske) {
+  cc.load("paragraphs");
+  await context.sync();
+
+  // Obriši postojeći sadržaj
+  cc.clear();
+  await context.sync();
+
+  const vidjenePrije = new Set();
+  let rbr = 1;
+
+  for (const sv of sveske) {
+    if (sv.tip === "glavna") continue;
+    const oznakaGrupe = sv.oznaka.includes(".") ? sv.oznaka.split(".")[0] : sv.oznaka;
+    if (vidjenePrije.has(oznakaGrupe)) continue;
+    vidjenePrije.add(oznakaGrupe);
+
+    const naslovTekst = TABELE_08_NAZIVI[oznakaGrupe] || sv.naziv;
+    const puna = `0.8.${rbr}. ${naslovTekst}`;
+
+    if (rbr > 1) {
+      cc.insertParagraph("", Word.InsertLocation.end);
+    }
+    cc.insertParagraph(puna, Word.InsertLocation.end);
+    rbr++;
+  }
+
+  await context.sync();
+  console.log(`✅ Naslovi 0.8 generisani: ${rbr - 1} naslova`);
+}
+
+// ============================================
+// HELPER: Upute za placeholder tabele
+// ============================================
+// Dodaje info u help text o tome kako da se postave placeholder tabele
+// (poziva se jednom na inicijalizaciji)
+function addTabeleHelpInfo() {
+  const help = document.querySelector(".help");
+  if (!help) return;
+  const extra = document.createElement("div");
+  extra.style.cssText = "margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px;";
+  extra.innerHTML = `
+    <strong>TABELE:</strong> U Word-u napravi Content Control (tab Developer) i u polje Tag upiši:<br>
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">BA_TABLE|type=04</code> za tabelu 0.4,
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">BA_TABLE|type=05</code> za 0.5,
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">BA_TABLE|type=061</code>,
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">BA_TABLE|type=062</code>,
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">BA_TABLE|type=08</code>
+  `;
+  help.appendChild(extra);
+}
+
+// Pozovi help info na load
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", addTabeleHelpInfo);
+} else {
+  addTabeleHelpInfo();
+}
+
