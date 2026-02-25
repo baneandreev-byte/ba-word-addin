@@ -1,11 +1,11 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-07 - V57 
+// VERZIJA: 2025-02-25 - V59 
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-07 - V44");
-console.log("✅ NOVO: SharePoint templejti - Graph API integracija");
-console.log("✅ SSO pristup SharePoint-u za učitavanje templata");
+console.log("🔧 BA Word Add-in VERZIJA: 2025-02-25 - V58");
+console.log("✅ NOVO: Izbor svezaka samo u TABELE modalu (uklonjen Step 3 iz GitHub picker-a)");
+console.log("✅ FIX: Nakon otvaranja Glavne sveske automatski se otvara TABELE modal");
 
 let rows = [];
 let selectedRowIndex = null;
@@ -1446,12 +1446,7 @@ function renderPickerStep2() {
     btn.addEventListener("mouseleave", () => { btn.style.background="#f9fafb"; btn.style.borderColor="#e5e7eb"; });
     btn.addEventListener("click", () => {
       _pickerSelectedFile = file;
-      if (file.isGlavna) {
-        initStrukeState();
-        renderPickerStep3();
-      } else {
-        openTemplateFromGitHub();
-      }
+      openTemplateFromGitHub();
     });
     body.appendChild(btn);
   });
@@ -1696,12 +1691,11 @@ async function openTemplateFromGitHub() {
     closeGitHubTemplateModal();
     setStatus(`Otvoren: ${fileName}`, "success");
 
-    // Ako je Glavna sveska i ima izabranih struka, popuni tagove
-    if (_pickerSelectedFile.isGlavna && window._selectedStruke && window._selectedStruke.length > 0) {
+    // Ako je Glavna sveska, otvori TABELE modal da korisnik izabere sveske i generiše tabele
+    if (_pickerSelectedFile.isGlavna) {
       setTimeout(() => {
-        setStatus("Popunjavam tabele struka...", "info");
-        fillStrukeTables(window._selectedStruke);
-      }, 1500);
+        openTabeleModal();
+      }, 1200);
     }
 
   } catch (error) {
@@ -2885,7 +2879,8 @@ function makePreviewTabela04_05(sveske) {
   sveske.forEach(s => {
     const tr = tbl.insertRow();
     const td1 = tr.insertCell(); td1.textContent = s.oznaka; td1.className = "auto-col";
-    const td2 = tr.insertCell(); td2.textContent = `PROJEKAT ${s.naziv}`; td2.className = "auto-col";
+    const nazivTekst = s.tip === "glavna" ? "GLAVNA SVESKA" : `PROJEKAT ${s.naziv}`;
+    const td2 = tr.insertCell(); td2.textContent = nazivTekst; td2.className = "auto-col";
     const td3 = tr.insertCell(); td3.textContent = "..."; td3.className = "empty-col";
   });
 
@@ -3389,4 +3384,3 @@ if (document.readyState === "loading") {
 } else {
   addTabeleHelpInfo();
 }
-
