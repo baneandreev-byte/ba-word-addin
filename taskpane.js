@@ -1,11 +1,11 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2025-02-25 - V59 
+// VERZIJA: 2026-02-26 - V63
 // ============================================
-console.log("🔧 BA Word Add-in VERZIJA: 2025-02-25 - V58");
-console.log("✅ NOVO: Izbor svezaka samo u TABELE modalu (uklonjen Step 3 iz GitHub picker-a)");
-console.log("✅ FIX: Nakon otvaranja Glavne sveske automatski se otvara TABELE modal");
+console.log("🔧 BA Word Add-in VERZIJA: 2026-02-26 - V63");
+console.log("✅ NOVO: Tabele koriste hidden tag pattern umesto Content Controls");
+console.log("✅ Placeholder: obična tabela sa [BA:04]/[BA:05]/[BA:061]/[BA:062]/[BA:08] u prvoj ćeliji");
 
 let rows = [];
 let selectedRowIndex = null;
@@ -3024,80 +3024,197 @@ function makePreview08(sveske) {
 // GENERISANJE TABELA U WORD-U
 // ============================================
 
+// ============================================
+// TABELE - Hidden Tag Pattern (V63)
+// Placeholder: obična Word tabela sa skrivenim ID tagom u prvoj ćeliji
+// Tag format: [BA:04], [BA:05], [BA:061], [BA:062], [BA:08]
+// Tag je skriven: font.color="white", font.size=1
+// ============================================
+
+// ID tagovi za svaki tip tabele
+const TABLE_TAGS = {
+  "04":  "[BA:04]",
+  "05":  "[BA:05]",
+  "061": "[BA:061]",
+  "062": "[BA:062]",
+  "08":  "[BA:08]",
+};
+
+// Pronađi tabelu u dokumentu po ID tagu, vrati parentTable ili null
+async function nadjiTabeluPoTagu(context, tag) {
+  const results = context.document.body.search(tag, { matchCase: true });
+  results.load("items");
+  await context.sync();
+  if (results.items.length === 0) return null;
+
+  const parentTable = results.items[0].parentTable;
+  parentTable.load("isNullObject");
+  await context.sync();
+  if (parentTable.isNullObject) return null;
+
+  return parentTable;
+}
+
+// Sakrij ID tag unutar tabele (bela boja, font 1pt)
+async function sakrijTag(context, table, tag) {
+  const tableRange = table.getRange();
+  const found = tableRange.search(tag, { matchCase: true });
+  found.load("items");
+  await context.sync();
+  if (found.items.length > 0) {
+    found.items[0].font.color = "white";
+    found.items[0].font.size = 1;
+    await context.sync();
+  }
+}
+
+// Zameni staru tabelu novom na istom mestu
+// Vraća novu tabelu
+async function zameniTabelu(context, staraTabela, noviPodaci, cols) {
+  const afterRange = staraTabela.getRange(Word.RangeLocation.after);
+  staraTabela.delete();
+  await context.sync();
+
+  const novaTabela = afterRange.insertTable(
+    noviPodaci.length, cols, Word.InsertLocation.before, noviPodaci
+  );
+  novaTabela.styleBuiltIn = Word.Style.tableGrid;
+  await context.sync();
+  return novaTabela;
+}
+
+// Upiši podatke u postojeću tabelu (uskladi broj redova, popuni ćelije)
+async function popuniTabelu(context, table, podaci, cols) {
+  table.load("rowCount");
+  await context.sync();
+
+  const targetRows = podaci.length;
+  const currentRows = table.rowCount;
+
+  if (currentRows < targetRows) {
+    for (let i = currentRows; i < targetRows; i++) {
+      table.addRows(Word.InsertLocation.end, 1);
+    }
+    await context.sync();
+  }
+
+  table.load("rows/items");
+  await context.sync();
+
+  for (let i = 0; i < targetRows; i++) {
+    if (i >= table.rows.items.length) break;
+    const row = table.rows.items[i];
+    row.load("cells/items");
+    await context.sync();
+
+    const cells = row.cells.items;
+    for (let c = 0; c < cols; c++) {
+      if (!cells[c]) continue;
+      cells[c].body.clear();
+      const val = (podaci[i] && podaci[i][c] != null) ? String(podaci[i][c]) : "";
+      if (val) cells[c].body.insertText(val, Word.InsertLocation.start);
+    }
+  }
+
+  // Obriši višak redova odozdo
+  if (currentRows > targetRows) {
+    table.load("rows/items");
+    await context.sync();
+    for (let i = currentRows - 1; i >= targetRows; i--) {
+      if (table.rows.items[i]) table.rows.items[i].delete();
+    }
+    await context.sync();
+  }
+
+  await context.sync();
+}
+
+// Poravnaj prvu kolonu desno (da tag ne utiče na izgled prvog reda)
+async function poravnajPrvuKolonuDesno(context, table) {
+  table.load("rows/items");
+  await context.sync();
+  for (const row of table.rows.items) {
+    row.load("cells/items");
+    await context.sync();
+    if (row.cells.items[0]) {
+      row.cells.items[0].body.paragraphs.getFirst().alignment = Word.Alignment.right;
+    }
+  }
+  await context.sync();
+}
+
+// ---- Glavna funkcija generisanja ----
 async function generisiTabele() {
   const btn = el("tabeleGenerisiBtn");
   if (btn) { btn.disabled = true; btn.textContent = "⏳ Generiše se..."; }
 
   try {
-    const sveske = _tabeleSveske;
+    const sveske   = _tabeleSveske;
     const projekti = sveske.filter(s => s.tip !== "glavna" && s.tip !== "elaborat");
     const elaborati = sveske.filter(s => s.tip === "elaborat");
 
     let ukupnoTabela = 0;
 
     await Word.run(async (context) => {
-      // Učitaj sve tabele u dokumentu
-      const tables = context.document.body.tables;
-      tables.load("items");
-      await context.sync();
 
-      // Učitaj content controls za svaku tabelu
-      for (const table of tables.items) {
-        table.load("rowCount,rows/items/cells/items/body/text");
+      // ---- TABELA 04 ----
+      const t04 = await nadjiTabeluPoTagu(context, TABLE_TAGS["04"]);
+      if (t04) {
+        const podaci = napravi0405Podatke(sveske, "04");
+        await popuniTabelu(context, t04, podaci, 3);
+        await poravnajPrvuKolonuDesno(context, t04);
+        await sakrijTag(context, t04, TABLE_TAGS["04"]);
+        ukupnoTabela++;
+        console.log("✅ Tabela 04 generisana");
       }
 
-      // Učitaj sve content controls u dokumentu da nađemo tagove
-      const ccs = context.document.contentControls;
-      ccs.load("items/tag,items/tables");
-      await context.sync();
+      // ---- TABELA 05 ----
+      const t05 = await nadjiTabeluPoTagu(context, TABLE_TAGS["05"]);
+      if (t05) {
+        const podaci = napravi0405Podatke(sveske, "05");
+        await popuniTabelu(context, t05, podaci, 3);
+        await poravnajPrvuKolonuDesno(context, t05);
+        await sakrijTag(context, t05, TABLE_TAGS["05"]);
+        ukupnoTabela++;
+        console.log("✅ Tabela 05 generisana");
+      }
 
-      // Nađi content control-e sa BA_TABLE tagom i generiši tabele
-      for (const cc of ccs.items) {
-        const tag = cc.tag || "";
-        if (!tag.startsWith("BA_TABLE|")) continue;
+      // ---- TABELA 061 ----
+      const t061 = await nadjiTabeluPoTagu(context, TABLE_TAGS["061"]);
+      if (t061) {
+        const podaci = napravi061Podatke(projekti);
+        await popuniTabelu(context, t061, podaci, 2);
+        await sakrijTag(context, t061, TABLE_TAGS["061"]);
+        ukupnoTabela++;
+        console.log("✅ Tabela 061 generisana");
+      }
 
-        // Parsiranje tipa
-        const m = tag.match(/type=(\w+)/);
-        if (!m) continue;
-        const tip = m[1];
+      // ---- TABELA 062 ----
+      const t062 = await nadjiTabeluPoTagu(context, TABLE_TAGS["062"]);
+      if (t062) {
+        const podaci = napravi062Podatke(elaborati);
+        await popuniTabelu(context, t062, podaci, 2);
+        await sakrijTag(context, t062, TABLE_TAGS["062"]);
+        ukupnoTabela++;
+        console.log("✅ Tabela 062 generisana");
+      }
 
-        cc.load("tables");
-        await context.sync();
-
-        const ccTables = cc.tables;
-        ccTables.load("items");
-        await context.sync();
-
-        if (ccTables.items.length === 0) continue;
-        const table = ccTables.items[0];
-
-        // ---- TABELA 04 i 05 ----
-        if (tip === "04" || tip === "05") {
-          await generisiTabelu0405(context, table, sveske, tip);
-          ukupnoTabela++;
-        }
-        // ---- TABELA 061 ----
-        else if (tip === "061") {
-          await generisiTabelu061(context, table, projekti);
-          ukupnoTabela++;
-        }
-        // ---- TABELA 062 ----
-        else if (tip === "062") {
-          await generisiTabelu062(context, table, elaborati);
-          ukupnoTabela++;
-        }
-        // ---- NASLOVI 08 ----
-        else if (tip === "08") {
-          await generisiNaslove08(context, cc, sveske);
-          ukupnoTabela++;
-        }
+      // ---- NASLOVI 08 ----
+      // Tabela 08 je posebna: jedan red po naslovu, 1 kolona
+      const t08 = await nadjiTabeluPoTagu(context, TABLE_TAGS["08"]);
+      if (t08) {
+        const podaci = napravi08Podatke(sveske);
+        await popuniTabelu(context, t08, podaci, 1);
+        await sakrijTag(context, t08, TABLE_TAGS["08"]);
+        ukupnoTabela++;
+        console.log("✅ Tabela 08 generisana");
       }
 
       await context.sync();
     });
 
     if (ukupnoTabela === 0) {
-      setStatus("⚠️ Nisu nađene placeholder tabele. Dodaj content controls sa BA_TABLE tagovima.", "warn");
+      setStatus("⚠️ Nisu nađene placeholder tabele u dokumentu.", "warn");
     } else {
       setStatus(`✅ Generisano ${ukupnoTabela} tabele/a u dokumentu.`, "success");
     }
@@ -3111,250 +3228,73 @@ async function generisiTabele() {
   }
 }
 
-// ---- Generisanje tabele 0.4 i 0.5 ----
-// Struktura: 3 kolone - oznaka | naziv | br. licence (prazno)
-async function generisiTabelu0405(context, table, sveske, tip) {
-  table.load("rowCount,rows/items");
-  await context.sync();
-
-  // Odredi ciljni broj redova (header red + po jedan za svaku svesku)
-  const headerRows = 0; // nema header reda - cela tabela su podaci
-  const targetRows = sveske.length;
-  const currentRows = table.rowCount;
-
-  // Dodaj redove ako treba
-  if (currentRows < targetRows) {
-    for (let i = currentRows; i < targetRows; i++) {
-      table.addRows(Word.InsertLocation.end, 1);
-    }
-    await context.sync();
-    table.load("rows/items");
-    await context.sync();
-  }
-
-  // Upiši sadržaj u svaki red
-  const rows = table.rows;
-  rows.load("items");
-  await context.sync();
-
-  for (let i = 0; i < sveske.length; i++) {
-    const sv = sveske[i];
-    if (i >= rows.items.length) break;
-
-    const row = rows.items[i];
-    row.load("cells/items");
-    await context.sync();
-
-    const cells = row.cells.items;
-    if (cells.length < 2) continue;
-
-    // Ćelija 0: oznaka
-    cells[0].body.clear();
-    cells[0].body.insertText(sv.oznaka, Word.InsertLocation.start);
-
-    // Ćelija 1: naziv
-    const nazivTekst = sv.tip === "glavna"
+// ---- Podaci za tabelu 0.4 i 0.5 ----
+// 3 kolone: oznaka | naziv | prazno (za licencu)
+// ID tag ide u prvu ćeliju prvog reda (sakriven)
+function napravi0405Podatke(sveske, tip) {
+  return sveske.map((sv, i) => {
+    const col0 = i === 0 ? `${TABLE_TAGS[tip]} ${sv.oznaka}` : sv.oznaka;
+    const col1 = sv.tip === "glavna"
       ? "GLAVNA SVESKA"
-      : `PROJEKAT ${sv.naziv}`;
-    cells[1].body.clear();
-    cells[1].body.insertText(nazivTekst, Word.InsertLocation.start);
-
-    // Ćelija 2: prazna (za ručni unos)
-    if (cells.length > 2) {
-      cells[2].body.clear();
-    }
-  }
-
-  // Obrisi višak redova odozdo (od kraja da ne bude pomeranja indeksa)
-  if (currentRows > targetRows) {
-    for (let i = currentRows - 1; i >= targetRows; i--) {
-      const row = table.rows.items[i];
-      if (row) row.delete();
-    }
-    await context.sync();
-  }
-
-  await context.sync();
-  console.log(`✅ Tabela ${tip} generisana: ${sveske.length} redova`);
+      : sv.tip === "elaborat"
+        ? sv.naziv
+        : `PROJEKAT ${sv.naziv}`;
+    return [col0, col1, ""];
+  });
 }
 
-// ---- Generisanje tabele 0.6.1 ----
-// Struktura: 2 kolone, za svaki projekat blok od 4 reda:
-//   Red 1: "X. PROJEKAT NAZIV" | ""
-//   Red 2: "Projektant:" | ""
-//   Red 3: "Broj licence:" | ""
-//   Red 4: "Potpis:" | ""
-async function generisiTabelu061(context, table, projekti) {
-  if (projekti.length === 0) return;
-
-  const targetRows = projekti.length * 4;
-
-  table.load("rowCount");
-  await context.sync();
-
-  const currentRows = table.rowCount;
-
-  // Dodaj redove
-  if (currentRows < targetRows) {
-    for (let i = currentRows; i < targetRows; i++) {
-      table.addRows(Word.InsertLocation.end, 1);
-    }
-    await context.sync();
-  }
-
-  table.load("rows/items");
-  await context.sync();
-
-  for (let pi = 0; pi < projekti.length; pi++) {
-    const sv = projekti[pi];
-    const baseRow = pi * 4;
-
-    const redSadrzaji = [
-      `${sv.oznaka}. PROJEKAT ${sv.naziv}`,
-      "Projektant:",
-      "Broj licence:",
-      "Potpis:",
-    ];
-
-    for (let ri = 0; ri < 4; ri++) {
-      const rowIdx = baseRow + ri;
-      if (rowIdx >= table.rows.items.length) break;
-
-      const row = table.rows.items[rowIdx];
-      row.load("cells/items");
-      await context.sync();
-
-      const cells = row.cells.items;
-      if (cells.length < 1) continue;
-
-      // Leva kolona - automatski sadržaj
-      cells[0].body.clear();
-      cells[0].body.insertText(redSadrzaji[ri], Word.InsertLocation.start);
-
-      // Desna kolona - prazan prostor
-      if (cells.length > 1) {
-        cells[1].body.clear();
-      }
-    }
-  }
-
-  // Obrisi višak redova
-  if (currentRows > targetRows) {
-    table.load("rows/items");
-    await context.sync();
-    for (let i = currentRows - 1; i >= targetRows; i--) {
-      if (table.rows.items[i]) table.rows.items[i].delete();
-    }
-    await context.sync();
-  }
-
-  await context.sync();
-  console.log(`✅ Tabela 0.6.1 generisana: ${projekti.length} projektanata, ${targetRows} redova`);
+// ---- Podaci za tabelu 0.6.1 ----
+// 2 kolone, 4 reda po projektu
+function napravi061Podatke(projekti) {
+  const rows = [];
+  projekti.forEach((sv, pi) => {
+    rows.push([
+      pi === 0 ? `${TABLE_TAGS["061"]} ${sv.oznaka}. PROJEKAT ${sv.naziv}` : `${sv.oznaka}. PROJEKAT ${sv.naziv}`,
+      ""
+    ]);
+    rows.push(["Projektant:", ""]);
+    rows.push(["Broj licence:", ""]);
+    rows.push(["Potpis:", ""]);
+  });
+  return rows;
 }
 
-// ---- Generisanje tabele 0.6.2 ----
-// Za svaki elaborat blok od 5 redova:
-//   Red 1: "NAZIV ELABORATA:" | ""
-//   Red 2: "Izrađivač:" | ""
-//   Red 3: "Ovlašćeno lice:" | ""
-//   Red 4: "Broj ovlašćenja:" | ""
-//   Red 5: "Potpis:" | ""
-async function generisiTabelu062(context, table, elaborati) {
-  if (elaborati.length === 0) return;
-
-  const targetRows = elaborati.length * 5;
-
-  table.load("rowCount");
-  await context.sync();
-
-  const currentRows = table.rowCount;
-
-  if (currentRows < targetRows) {
-    for (let i = currentRows; i < targetRows; i++) {
-      table.addRows(Word.InsertLocation.end, 1);
-    }
-    await context.sync();
-  }
-
-  table.load("rows/items");
-  await context.sync();
-
-  for (let ei = 0; ei < elaborati.length; ei++) {
-    const sv = elaborati[ei];
-    const baseRow = ei * 5;
-
-    const redSadrzaji = [
-      `${sv.naziv}:`,
-      "Izrađivač:",
-      "Ovlašćeno lice:",
-      "Broj ovlašćenja:",
-      "Potpis:",
-    ];
-
-    for (let ri = 0; ri < 5; ri++) {
-      const rowIdx = baseRow + ri;
-      if (rowIdx >= table.rows.items.length) break;
-
-      const row = table.rows.items[rowIdx];
-      row.load("cells/items");
-      await context.sync();
-
-      const cells = row.cells.items;
-      if (cells.length < 1) continue;
-
-      cells[0].body.clear();
-      cells[0].body.insertText(redSadrzaji[ri], Word.InsertLocation.start);
-
-      if (cells.length > 1) {
-        cells[1].body.clear();
-      }
-    }
-  }
-
-  if (currentRows > targetRows) {
-    table.load("rows/items");
-    await context.sync();
-    for (let i = currentRows - 1; i >= targetRows; i--) {
-      if (table.rows.items[i]) table.rows.items[i].delete();
-    }
-    await context.sync();
-  }
-
-  await context.sync();
-  console.log(`✅ Tabela 0.6.2 generisana: ${elaborati.length} elaborata, ${targetRows} redova`);
+// ---- Podaci za tabelu 0.6.2 ----
+// 2 kolone, 5 redova po elaboratu
+function napravi062Podatke(elaborati) {
+  const rows = [];
+  elaborati.forEach((sv, ei) => {
+    rows.push([
+      ei === 0 ? `${TABLE_TAGS["062"]} ${sv.naziv}:` : `${sv.naziv}:`,
+      ""
+    ]);
+    rows.push(["Izrađivač:", ""]);
+    rows.push(["Ovlašćeno lice:", ""]);
+    rows.push(["Broj ovlašćenja:", ""]);
+    rows.push(["Potpis:", ""]);
+  });
+  return rows;
 }
 
-// ---- Generisanje naslova 0.8 ----
-// Briše sadržaj CC-a i upisuje naslove kao paragrafe
-async function generisiNaslove08(context, cc, sveske) {
-  cc.load("paragraphs");
-  await context.sync();
-
-  // Obriši postojeći sadržaj
-  cc.clear();
-  await context.sync();
-
-  const vidjenePrije = new Set();
+// ---- Podaci za tabelu 0.8 ----
+// 1 kolona, jedan red po grupi
+function napravi08Podatke(sveske) {
+  const seen = new Set();
+  const rows = [];
   let rbr = 1;
 
   for (const sv of sveske) {
     if (sv.tip === "glavna") continue;
-    const oznakaGrupe = sv.oznaka.includes(".") ? sv.oznaka.split(".")[0] : sv.oznaka;
-    if (vidjenePrije.has(oznakaGrupe)) continue;
-    vidjenePrije.add(oznakaGrupe);
+    const grupa = sv.oznaka.includes(".") ? sv.oznaka.split(".")[0] : sv.oznaka;
+    if (seen.has(grupa)) continue;
+    seen.add(grupa);
 
-    const naslovTekst = TABELE_08_NAZIVI[oznakaGrupe] || sv.naziv;
-    const puna = `0.8.${rbr}. ${naslovTekst}`;
-
-    if (rbr > 1) {
-      cc.insertParagraph("", Word.InsertLocation.end);
-    }
-    cc.insertParagraph(puna, Word.InsertLocation.end);
+    const naslov = TABELE_08_NAZIVI[grupa] || sv.naziv;
+    const tekst = `0.8.${rbr}. ${naslov}`;
+    rows.push([rbr === 1 ? `${TABLE_TAGS["08"]} ${tekst}` : tekst]);
     rbr++;
   }
-
-  await context.sync();
-  console.log(`✅ Naslovi 0.8 generisani: ${rbr - 1} naslova`);
+  return rows;
 }
 
 // ============================================
@@ -3368,12 +3308,13 @@ function addTabeleHelpInfo() {
   const extra = document.createElement("div");
   extra.style.cssText = "margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px;";
   extra.innerHTML = `
-    <strong>TABELE:</strong> U Word-u napravi Content Control (tab Developer) i u polje Tag upiši:<br>
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">BA_TABLE|type=04</code> za tabelu 0.4,
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">BA_TABLE|type=05</code> za 0.5,
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">BA_TABLE|type=061</code>,
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">BA_TABLE|type=062</code>,
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">BA_TABLE|type=08</code>
+    <strong>TABELE:</strong> U template ubaci običnu Word tabelu i u prvu ćeliju prvog reda upiši odgovarajući tag:<br>
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:04]</code> za tabelu 0.4,
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:05]</code> za 0.5,
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:061]</code>,
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:062]</code>,
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:08]</code>
+    — tag se automatski sakriva pri generisanju.
   `;
   help.appendChild(extra);
 }
