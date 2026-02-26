@@ -1,7 +1,7 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2026-02-26 - V63
+// VERZIJA: 2026-02-26 - V64
 // ============================================
 console.log("🔧 BA Word Add-in VERZIJA: 2026-02-26 - V63");
 console.log("✅ NOVO: Tabele koriste hidden tag pattern umesto Content Controls");
@@ -3131,16 +3131,25 @@ async function popuniTabelu(context, table, podaci, cols) {
 
 // Poravnaj prvu kolonu desno (da tag ne utiče na izgled prvog reda)
 async function poravnajPrvuKolonuDesno(context, table) {
-  table.load("rows/items");
-  await context.sync();
-  for (const row of table.rows.items) {
-    row.load("cells/items");
+  try {
+    table.load("rows/items");
     await context.sync();
-    if (row.cells.items[0]) {
-      row.cells.items[0].body.paragraphs.getFirst().alignment = Word.Alignment.right;
+    for (const row of table.rows.items) {
+      row.load("cells/items");
+      await context.sync();
+      if (row.cells.items[0]) {
+        const paras = row.cells.items[0].body.paragraphs;
+        paras.load("items");
+        await context.sync();
+        if (paras.items.length > 0) {
+          paras.items[0].alignment = Word.Alignment.right;
+        }
+      }
     }
+    await context.sync();
+  } catch (e) {
+    console.warn("⚠️ poravnajPrvuKolonuDesno greška (preskočeno):", e.message);
   }
-  await context.sync();
 }
 
 // ---- Glavna funkcija generisanja ----
@@ -3158,57 +3167,64 @@ async function generisiTabele() {
     await Word.run(async (context) => {
 
       // ---- TABELA 04 ----
-      const t04 = await nadjiTabeluPoTagu(context, TABLE_TAGS["04"]);
-      if (t04) {
-        const podaci = napravi0405Podatke(sveske, "04");
-        await popuniTabelu(context, t04, podaci, 3);
-        await poravnajPrvuKolonuDesno(context, t04);
-        await sakrijTag(context, t04, TABLE_TAGS["04"]);
-        ukupnoTabela++;
-        console.log("✅ Tabela 04 generisana");
-      }
+      try {
+        const t04 = await nadjiTabeluPoTagu(context, TABLE_TAGS["04"]);
+        if (t04) {
+          const podaci = napravi0405Podatke(sveske, "04");
+          await popuniTabelu(context, t04, podaci, 3);
+          await sakrijTag(context, t04, TABLE_TAGS["04"]);
+          ukupnoTabela++;
+          console.log("✅ Tabela 04 generisana");
+        }
+      } catch(e) { console.error("❌ Tabela 04:", e.message); }
 
       // ---- TABELA 05 ----
-      const t05 = await nadjiTabeluPoTagu(context, TABLE_TAGS["05"]);
-      if (t05) {
-        const podaci = napravi0405Podatke(sveske, "05");
-        await popuniTabelu(context, t05, podaci, 3);
-        await poravnajPrvuKolonuDesno(context, t05);
-        await sakrijTag(context, t05, TABLE_TAGS["05"]);
-        ukupnoTabela++;
-        console.log("✅ Tabela 05 generisana");
-      }
+      try {
+        const t05 = await nadjiTabeluPoTagu(context, TABLE_TAGS["05"]);
+        if (t05) {
+          const podaci = napravi0405Podatke(sveske, "05");
+          await popuniTabelu(context, t05, podaci, 3);
+          await sakrijTag(context, t05, TABLE_TAGS["05"]);
+          ukupnoTabela++;
+          console.log("✅ Tabela 05 generisana");
+        }
+      } catch(e) { console.error("❌ Tabela 05:", e.message); }
 
       // ---- TABELA 061 ----
-      const t061 = await nadjiTabeluPoTagu(context, TABLE_TAGS["061"]);
-      if (t061) {
-        const podaci = napravi061Podatke(projekti);
-        await popuniTabelu(context, t061, podaci, 2);
-        await sakrijTag(context, t061, TABLE_TAGS["061"]);
-        ukupnoTabela++;
-        console.log("✅ Tabela 061 generisana");
-      }
+      try {
+        const t061 = await nadjiTabeluPoTagu(context, TABLE_TAGS["061"]);
+        if (t061) {
+          const podaci = napravi061Podatke(projekti);
+          await popuniTabelu(context, t061, podaci, 2);
+          await sakrijTag(context, t061, TABLE_TAGS["061"]);
+          ukupnoTabela++;
+          console.log("✅ Tabela 061 generisana");
+        }
+      } catch(e) { console.error("❌ Tabela 061:", e.message); }
 
       // ---- TABELA 062 ----
-      const t062 = await nadjiTabeluPoTagu(context, TABLE_TAGS["062"]);
-      if (t062) {
-        const podaci = napravi062Podatke(elaborati);
-        await popuniTabelu(context, t062, podaci, 2);
-        await sakrijTag(context, t062, TABLE_TAGS["062"]);
-        ukupnoTabela++;
-        console.log("✅ Tabela 062 generisana");
-      }
+      try {
+        const t062 = await nadjiTabeluPoTagu(context, TABLE_TAGS["062"]);
+        if (t062) {
+          const podaci = napravi062Podatke(elaborati);
+          await popuniTabelu(context, t062, podaci, 2);
+          await sakrijTag(context, t062, TABLE_TAGS["062"]);
+          ukupnoTabela++;
+          console.log("✅ Tabela 062 generisana");
+        }
+      } catch(e) { console.error("❌ Tabela 062:", e.message); }
 
-      // ---- NASLOVI 08 ----
-      // Tabela 08 je posebna: jedan red po naslovu, 1 kolona
-      const t08 = await nadjiTabeluPoTagu(context, TABLE_TAGS["08"]);
-      if (t08) {
-        const podaci = napravi08Podatke(sveske);
-        await popuniTabelu(context, t08, podaci, 1);
-        await sakrijTag(context, t08, TABLE_TAGS["08"]);
-        ukupnoTabela++;
-        console.log("✅ Tabela 08 generisana");
-      }
+      // ---- TABELA 08 ----
+      try {
+        const t08 = await nadjiTabeluPoTagu(context, TABLE_TAGS["08"]);
+        if (t08) {
+          const podaci = napravi08Podatke(sveske);
+          await popuniTabelu(context, t08, podaci, 1);
+          await sakrijTag(context, t08, TABLE_TAGS["08"]);
+          ukupnoTabela++;
+          console.log("✅ Tabela 08 generisana");
+        }
+      } catch(e) { console.error("❌ Tabela 08:", e.message); }
 
       await context.sync();
     });
