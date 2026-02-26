@@ -1,7 +1,7 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2026-02-26 - V65
+// VERZIJA: 2026-02-26 - V66
 // ============================================
 console.log("🔧 BA Word Add-in VERZIJA: 2026-02-26 - V63");
 console.log("✅ NOVO: Tabele koriste hidden tag pattern umesto Content Controls");
