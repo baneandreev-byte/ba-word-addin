@@ -1,7 +1,7 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2026-02-26 - V67
+// VERZIJA: 2026-02-26 - V68
 // ============================================
 console.log("🔧 BA Word Add-in VERZIJA: 2026-02-26 - V63");
 console.log("✅ NOVO: Tabele koriste hidden tag pattern umesto Content Controls");
@@ -3033,7 +3033,8 @@ function makePreview08(sveske) {
 // ============================================
 
 // ============================
-// TAGOVI (robust): prihvati i [BA:04] i BA.04 i BA:04
+// TAGOVI: tag je pasus iznad tabele (anchor pristup)
+// Prihvata [BA:04], BA.04, BA:04
 // ============================
 const TABLE_TAG_ALIASES = {
   "04":  ["[BA:04]", "BA.04", "BA:04"],
@@ -3043,66 +3044,64 @@ const TABLE_TAG_ALIASES = {
   "08":  ["[BA:08]", "BA.08", "BA:08"],
 };
 
-// Standardni (primarni) tag koji plugin upisuje pri generisanju
 function primaryTag(type) {
-  return TABLE_TAG_ALIASES[type][0]; // npr. "[BA:04]"
+  return TABLE_TAG_ALIASES[type][0];
 }
 
-function _norm(s) {
-  return String(s || "").replace(/\s+/g, " ").trim();
-}
-
-async function _getFirstCellText(context, table) {
-  const cellRange = table.getCell(0, 0).body.getRange();
-  cellRange.load("text");
-  await context.sync();
-  return _norm(cellRange.text);
-}
-
-// Pronađi tabelu po tipu — gleda prvu ćeliju prve vrste svake tabele
+// Pronađi tabelu: traži pasus sa tagom, uzima prvu tabelu POSLE njega
 async function nadjiTabeluPoTagu(context, type) {
-  const aliases = TABLE_TAG_ALIASES[type] || [];
-  if (!aliases.length) return null;
+  const aliases = TABLE_TAG_ALIASES[type];
+  if (!aliases) return null;
 
-  const tables = context.document.body.tables;
-  tables.load("items");
-  await context.sync();
-
-  for (const t of tables.items) {
+  // Probaj svaki alias redom
+  for (const alias of aliases) {
     try {
-      const txt = await _getFirstCellText(context, t);
-      if (aliases.some(a => txt === _norm(a) || txt.startsWith(_norm(a) + " "))) {
-        return t;
+      const found = context.document.body.search(alias, { matchCase: true });
+      found.load("items");
+      await context.sync();
+
+      if (!found.items.length) continue;
+
+      const tagRange = found.items[0];
+      const after = tagRange.getRange("After");
+      const tables = after.tables;
+      tables.load("items");
+      await context.sync();
+
+      if (tables.items.length > 0) {
+        console.log(`  ✅ Nađen tag "${alias}", tabela pronađena`);
+        return tables.items[0];
+      } else {
+        console.warn(`  ⚠️ Tag "${alias}" nađen ali nema tabele posle njega`);
+        return null;
       }
-    } catch (e) { /* preskoči */ }
+    } catch(e) {
+      console.warn(`  ⚠️ Greška pri traženju "${alias}":`, e.message);
+    }
   }
+
+  console.warn(`  ❌ Nijedan alias za tip "${type}" nije nađen`);
   return null;
 }
 
-// Sakrij tag u prvoj ćeliji (0,0) — traži koji alias je stvarno upisan
-async function sakrijTagUPrvojCeliji(context, table, type) {
-  const aliases = TABLE_TAG_ALIASES[type] || [];
-  if (!aliases.length) return;
-  try {
-    const cellRange = table.getCell(0, 0).body.getRange();
-    cellRange.load("text");
-    await context.sync();
+// Sakrij tag pasus (font bela, 1pt) — tag je u pasusu, ne u tabeli
+async function sakrijTagPasus(context, type) {
+  const aliases = TABLE_TAG_ALIASES[type];
+  if (!aliases) return;
 
-    const text = cellRange.text || "";
-    const hit = aliases.find(a => text.includes(a));
-    if (!hit) return;
-
-    const found = cellRange.search(hit, { matchCase: true, matchWholeWord: false });
-    found.load("items");
-    await context.sync();
-
-    if (found.items.length > 0) {
-      found.items[0].font.color = "white";
-      found.items[0].font.size = 1;
+  for (const alias of aliases) {
+    try {
+      const found = context.document.body.search(alias, { matchCase: true });
+      found.load("items");
       await context.sync();
-    }
-  } catch(e) {
-    console.warn("⚠️ sakrijTagUPrvojCeliji greška:", e.message);
+
+      if (found.items.length > 0) {
+        found.items[0].font.color = "white";
+        found.items[0].font.size = 1;
+        await context.sync();
+        return;
+      }
+    } catch(e) { /* preskoči */ }
   }
 }
 
@@ -3127,7 +3126,8 @@ async function popuniTabelu(context, table, podaci, cols) {
   await context.sync();
 
   const targetRows = podaci.length;
-  const currentRows = table.rowCount;
+  let currentRows = table.rowCount;
+  console.log(`  popuniTabelu: currentRows=${currentRows}, targetRows=${targetRows}, cols=${cols}`);
 
   if (currentRows < targetRows) {
     for (let i = currentRows; i < targetRows; i++) {
@@ -3154,7 +3154,11 @@ async function popuniTabelu(context, table, podaci, cols) {
     }
   }
 
-  // Obriši višak redova odozdo
+  // Reload aktuelnog broja redova pre brisanja viška
+  table.load("rowCount");
+  await context.sync();
+  currentRows = table.rowCount;
+
   if (currentRows > targetRows) {
     table.load("rows/items");
     await context.sync();
@@ -3211,7 +3215,7 @@ async function generisiTabele() {
         if (t04) {
           const podaci = napravi0405Podatke(sveske, "04");
           await popuniTabelu(context, t04, podaci, 3);
-          await sakrijTagUPrvojCeliji(context, t04, "04");
+          await sakrijTagPasus(context, "04");
           ukupnoTabela++;
           console.log("✅ Tabela 04 generisana");
         }
@@ -3223,7 +3227,7 @@ async function generisiTabele() {
         if (t05) {
           const podaci = napravi0405Podatke(sveske, "05");
           await popuniTabelu(context, t05, podaci, 3);
-          await sakrijTagUPrvojCeliji(context, t05, "05");
+          await sakrijTagPasus(context, "05");
           ukupnoTabela++;
           console.log("✅ Tabela 05 generisana");
         }
@@ -3235,7 +3239,7 @@ async function generisiTabele() {
         if (t061) {
           const podaci = napravi061Podatke(projekti);
           await popuniTabelu(context, t061, podaci, 2);
-          await sakrijTagUPrvojCeliji(context, t061, "061");
+          await sakrijTagPasus(context, "061");
           ukupnoTabela++;
           console.log("✅ Tabela 061 generisana");
         }
@@ -3247,7 +3251,7 @@ async function generisiTabele() {
         if (t062) {
           const podaci = napravi062Podatke(elaborati);
           await popuniTabelu(context, t062, podaci, 2);
-          await sakrijTagUPrvojCeliji(context, t062, "062");
+          await sakrijTagPasus(context, "062");
           ukupnoTabela++;
           console.log("✅ Tabela 062 generisana");
         }
@@ -3259,7 +3263,7 @@ async function generisiTabele() {
         if (t08) {
           const podaci = napravi08Podatke(sveske);
           await popuniTabelu(context, t08, podaci, 1);
-          await sakrijTagUPrvojCeliji(context, t08, "08");
+          await sakrijTagPasus(context, "08");
           ukupnoTabela++;
           console.log("✅ Tabela 08 generisana");
         }
@@ -3357,13 +3361,15 @@ function addTabeleHelpInfo() {
   const extra = document.createElement("div");
   extra.style.cssText = "margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px;";
   extra.innerHTML = `
-    <strong>TABELE:</strong> U template ubaci običnu Word tabelu i u prvu ćeliju prvog reda upiši tag (preporučeno sa zagradama):<br>
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:04]</code>,
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:05]</code>,
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:061]</code>,
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:062]</code>,
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:08]</code><br>
-    (alternativno može i <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">BA.04</code> itd.) — tag se automatski sakriva pri generisanju.
+    <strong>TABELE:</strong> U template upiši tag u poseban pasus iznad tabele:<br>
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:04]</code> ← pasus<br>
+    <em style="color:#6b7280">(tabela ispod)</em><br><br>
+    Tagovi: <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:04]</code>
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:05]</code>
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:061]</code>
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:062]</code>
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:08]</code>
+    — tag pasus se sakriva pri generisanju.
   `;
   help.appendChild(extra);
 }
