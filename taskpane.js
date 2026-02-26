@@ -1,7 +1,7 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2026-02-26 - V64
+// VERZIJA: 2026-02-26 - V65
 // ============================================
 console.log("🔧 BA Word Add-in VERZIJA: 2026-02-26 - V63");
 console.log("✅ NOVO: Tabele koriste hidden tag pattern umesto Content Controls");
@@ -3032,12 +3032,13 @@ function makePreview08(sveske) {
 // ============================================
 
 // ID tagovi za svaki tip tabele
+// VAŽNO: bez uglastih zagrada [] jer su specijalni karakteri u Word search-u
 const TABLE_TAGS = {
-  "04":  "[BA:04]",
-  "05":  "[BA:05]",
-  "061": "[BA:061]",
-  "062": "[BA:062]",
-  "08":  "[BA:08]",
+  "04":  "BA.04",
+  "05":  "BA.05",
+  "061": "BA.061",
+  "062": "BA.062",
+  "08":  "BA.08",
 };
 
 // Pronađi tabelu u dokumentu po ID tagu, vrati parentTable ili null
