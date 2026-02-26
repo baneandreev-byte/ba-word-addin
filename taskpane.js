@@ -1,7 +1,7 @@
 /* global Office, Word */
 
 // ============================================
-// VERZIJA: 2026-02-26 - V66
+// VERZIJA: 2026-02-26 - V67
 // ============================================
 console.log("🔧 BA Word Add-in VERZIJA: 2026-02-26 - V63");
 console.log("✅ NOVO: Tabele koriste hidden tag pattern umesto Content Controls");
@@ -2568,6 +2568,7 @@ function setTabeleHeader(title, showBack, onBack) {
 
 function setTabeleFooter(buttons) {
   const footer = el("tabeleFooter");
+  console.log("🔴 setTabeleFooter, footer:", footer, "buttons:", buttons.length);
   if (!footer) return;
   footer.innerHTML = "";
   buttons.forEach(b => {
@@ -3031,41 +3032,77 @@ function makePreview08(sveske) {
 // Tag je skriven: font.color="white", font.size=1
 // ============================================
 
-// ID tagovi za svaki tip tabele
-// VAŽNO: bez uglastih zagrada [] jer su specijalni karakteri u Word search-u
-const TABLE_TAGS = {
-  "04":  "BA.04",
-  "05":  "BA.05",
-  "061": "BA.061",
-  "062": "BA.062",
-  "08":  "BA.08",
+// ============================
+// TAGOVI (robust): prihvati i [BA:04] i BA.04 i BA:04
+// ============================
+const TABLE_TAG_ALIASES = {
+  "04":  ["[BA:04]", "BA.04", "BA:04"],
+  "05":  ["[BA:05]", "BA.05", "BA:05"],
+  "061": ["[BA:061]", "BA.061", "BA:061"],
+  "062": ["[BA:062]", "BA.062", "BA:062"],
+  "08":  ["[BA:08]", "BA.08", "BA:08"],
 };
 
-// Pronađi tabelu u dokumentu po ID tagu, vrati parentTable ili null
-async function nadjiTabeluPoTagu(context, tag) {
-  const results = context.document.body.search(tag, { matchCase: true });
-  results.load("items");
-  await context.sync();
-  if (results.items.length === 0) return null;
-
-  const parentTable = results.items[0].parentTable;
-  parentTable.load("isNullObject");
-  await context.sync();
-  if (parentTable.isNullObject) return null;
-
-  return parentTable;
+// Standardni (primarni) tag koji plugin upisuje pri generisanju
+function primaryTag(type) {
+  return TABLE_TAG_ALIASES[type][0]; // npr. "[BA:04]"
 }
 
-// Sakrij ID tag unutar tabele (bela boja, font 1pt)
-async function sakrijTag(context, table, tag) {
-  const tableRange = table.getRange();
-  const found = tableRange.search(tag, { matchCase: true });
-  found.load("items");
+function _norm(s) {
+  return String(s || "").replace(/\s+/g, " ").trim();
+}
+
+async function _getFirstCellText(context, table) {
+  const cellRange = table.getCell(0, 0).body.getRange();
+  cellRange.load("text");
   await context.sync();
-  if (found.items.length > 0) {
-    found.items[0].font.color = "white";
-    found.items[0].font.size = 1;
+  return _norm(cellRange.text);
+}
+
+// Pronađi tabelu po tipu — gleda prvu ćeliju prve vrste svake tabele
+async function nadjiTabeluPoTagu(context, type) {
+  const aliases = TABLE_TAG_ALIASES[type] || [];
+  if (!aliases.length) return null;
+
+  const tables = context.document.body.tables;
+  tables.load("items");
+  await context.sync();
+
+  for (const t of tables.items) {
+    try {
+      const txt = await _getFirstCellText(context, t);
+      if (aliases.some(a => txt === _norm(a) || txt.startsWith(_norm(a) + " "))) {
+        return t;
+      }
+    } catch (e) { /* preskoči */ }
+  }
+  return null;
+}
+
+// Sakrij tag u prvoj ćeliji (0,0) — traži koji alias je stvarno upisan
+async function sakrijTagUPrvojCeliji(context, table, type) {
+  const aliases = TABLE_TAG_ALIASES[type] || [];
+  if (!aliases.length) return;
+  try {
+    const cellRange = table.getCell(0, 0).body.getRange();
+    cellRange.load("text");
     await context.sync();
+
+    const text = cellRange.text || "";
+    const hit = aliases.find(a => text.includes(a));
+    if (!hit) return;
+
+    const found = cellRange.search(hit, { matchCase: true, matchWholeWord: false });
+    found.load("items");
+    await context.sync();
+
+    if (found.items.length > 0) {
+      found.items[0].font.color = "white";
+      found.items[0].font.size = 1;
+      await context.sync();
+    }
+  } catch(e) {
+    console.warn("⚠️ sakrijTagUPrvojCeliji greška:", e.message);
   }
 }
 
@@ -3155,6 +3192,7 @@ async function poravnajPrvuKolonuDesno(context, table) {
 
 // ---- Glavna funkcija generisanja ----
 async function generisiTabele() {
+  console.log("🔴 generisiTabele() POZVANA");
   const btn = el("tabeleGenerisiBtn");
   if (btn) { btn.disabled = true; btn.textContent = "⏳ Generiše se..."; }
 
@@ -3169,11 +3207,11 @@ async function generisiTabele() {
 
       // ---- TABELA 04 ----
       try {
-        const t04 = await nadjiTabeluPoTagu(context, TABLE_TAGS["04"]);
+        const t04 = await nadjiTabeluPoTagu(context, "04");
         if (t04) {
           const podaci = napravi0405Podatke(sveske, "04");
           await popuniTabelu(context, t04, podaci, 3);
-          await sakrijTag(context, t04, TABLE_TAGS["04"]);
+          await sakrijTagUPrvojCeliji(context, t04, "04");
           ukupnoTabela++;
           console.log("✅ Tabela 04 generisana");
         }
@@ -3181,11 +3219,11 @@ async function generisiTabele() {
 
       // ---- TABELA 05 ----
       try {
-        const t05 = await nadjiTabeluPoTagu(context, TABLE_TAGS["05"]);
+        const t05 = await nadjiTabeluPoTagu(context, "05");
         if (t05) {
           const podaci = napravi0405Podatke(sveske, "05");
           await popuniTabelu(context, t05, podaci, 3);
-          await sakrijTag(context, t05, TABLE_TAGS["05"]);
+          await sakrijTagUPrvojCeliji(context, t05, "05");
           ukupnoTabela++;
           console.log("✅ Tabela 05 generisana");
         }
@@ -3193,11 +3231,11 @@ async function generisiTabele() {
 
       // ---- TABELA 061 ----
       try {
-        const t061 = await nadjiTabeluPoTagu(context, TABLE_TAGS["061"]);
+        const t061 = await nadjiTabeluPoTagu(context, "061");
         if (t061) {
           const podaci = napravi061Podatke(projekti);
           await popuniTabelu(context, t061, podaci, 2);
-          await sakrijTag(context, t061, TABLE_TAGS["061"]);
+          await sakrijTagUPrvojCeliji(context, t061, "061");
           ukupnoTabela++;
           console.log("✅ Tabela 061 generisana");
         }
@@ -3205,11 +3243,11 @@ async function generisiTabele() {
 
       // ---- TABELA 062 ----
       try {
-        const t062 = await nadjiTabeluPoTagu(context, TABLE_TAGS["062"]);
+        const t062 = await nadjiTabeluPoTagu(context, "062");
         if (t062) {
           const podaci = napravi062Podatke(elaborati);
           await popuniTabelu(context, t062, podaci, 2);
-          await sakrijTag(context, t062, TABLE_TAGS["062"]);
+          await sakrijTagUPrvojCeliji(context, t062, "062");
           ukupnoTabela++;
           console.log("✅ Tabela 062 generisana");
         }
@@ -3217,11 +3255,11 @@ async function generisiTabele() {
 
       // ---- TABELA 08 ----
       try {
-        const t08 = await nadjiTabeluPoTagu(context, TABLE_TAGS["08"]);
+        const t08 = await nadjiTabeluPoTagu(context, "08");
         if (t08) {
           const podaci = napravi08Podatke(sveske);
           await popuniTabelu(context, t08, podaci, 1);
-          await sakrijTag(context, t08, TABLE_TAGS["08"]);
+          await sakrijTagUPrvojCeliji(context, t08, "08");
           ukupnoTabela++;
           console.log("✅ Tabela 08 generisana");
         }
@@ -3250,7 +3288,7 @@ async function generisiTabele() {
 // ID tag ide u prvu ćeliju prvog reda (sakriven)
 function napravi0405Podatke(sveske, tip) {
   return sveske.map((sv, i) => {
-    const col0 = i === 0 ? `${TABLE_TAGS[tip]} ${sv.oznaka}` : sv.oznaka;
+    const col0 = i === 0 ? `${primaryTag(tip)} ${sv.oznaka}` : sv.oznaka;
     const col1 = sv.tip === "glavna"
       ? "GLAVNA SVESKA"
       : sv.tip === "elaborat"
@@ -3260,13 +3298,11 @@ function napravi0405Podatke(sveske, tip) {
   });
 }
 
-// ---- Podaci za tabelu 0.6.1 ----
-// 2 kolone, 4 reda po projektu
 function napravi061Podatke(projekti) {
   const rows = [];
   projekti.forEach((sv, pi) => {
     rows.push([
-      pi === 0 ? `${TABLE_TAGS["061"]} ${sv.oznaka}. PROJEKAT ${sv.naziv}` : `${sv.oznaka}. PROJEKAT ${sv.naziv}`,
+      pi === 0 ? `${primaryTag("061")} ${sv.oznaka}. PROJEKAT ${sv.naziv}` : `${sv.oznaka}. PROJEKAT ${sv.naziv}`,
       ""
     ]);
     rows.push(["Projektant:", ""]);
@@ -3276,13 +3312,11 @@ function napravi061Podatke(projekti) {
   return rows;
 }
 
-// ---- Podaci za tabelu 0.6.2 ----
-// 2 kolone, 5 redova po elaboratu
 function napravi062Podatke(elaborati) {
   const rows = [];
   elaborati.forEach((sv, ei) => {
     rows.push([
-      ei === 0 ? `${TABLE_TAGS["062"]} ${sv.naziv}:` : `${sv.naziv}:`,
+      ei === 0 ? `${primaryTag("062")} ${sv.naziv}:` : `${sv.naziv}:`,
       ""
     ]);
     rows.push(["Izrađivač:", ""]);
@@ -3293,8 +3327,6 @@ function napravi062Podatke(elaborati) {
   return rows;
 }
 
-// ---- Podaci za tabelu 0.8 ----
-// 1 kolona, jedan red po grupi
 function napravi08Podatke(sveske) {
   const seen = new Set();
   const rows = [];
@@ -3308,7 +3340,7 @@ function napravi08Podatke(sveske) {
 
     const naslov = TABELE_08_NAZIVI[grupa] || sv.naziv;
     const tekst = `0.8.${rbr}. ${naslov}`;
-    rows.push([rbr === 1 ? `${TABLE_TAGS["08"]} ${tekst}` : tekst]);
+    rows.push([rbr === 1 ? `${primaryTag("08")} ${tekst}` : tekst]);
     rbr++;
   }
   return rows;
@@ -3325,13 +3357,13 @@ function addTabeleHelpInfo() {
   const extra = document.createElement("div");
   extra.style.cssText = "margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px;";
   extra.innerHTML = `
-    <strong>TABELE:</strong> U template ubaci običnu Word tabelu i u prvu ćeliju prvog reda upiši odgovarajući tag:<br>
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:04]</code> za tabelu 0.4,
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:05]</code> za 0.5,
+    <strong>TABELE:</strong> U template ubaci običnu Word tabelu i u prvu ćeliju prvog reda upiši tag (preporučeno sa zagradama):<br>
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:04]</code>,
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:05]</code>,
     <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:061]</code>,
     <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:062]</code>,
-    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:08]</code>
-    — tag se automatski sakriva pri generisanju.
+    <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">[BA:08]</code><br>
+    (alternativno može i <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">BA.04</code> itd.) — tag se automatski sakriva pri generisanju.
   `;
   help.appendChild(extra);
 }
