@@ -10,13 +10,22 @@
 
 <body>
   <div class="shell">
-    
-    <!-- Status bar -->
-    <div id="status" class="status" style="display:none;"></div>
 
-    <!-- Tab buttons - KLIJENT: bez UBACI POLJE i TABELE -->
+    <!-- Header -->
+    <div class="admin-header">
+      <span class="admin-header-icon">📋</span>
+      <div class="admin-header-text">
+        <div class="admin-header-title">BiroA Word dodatak</div>
+        <div class="admin-header-sub" id="headerSub">Popunjavanje projektnih podataka</div>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div id="status" class="status hidden"></div>
+
+    <!-- Tab buttons -->
     <div class="tabs">
-      <button id="btnFill" class="tab-btn">POPUNI</button>
+      <button id="btnFill" class="tab-btn active">POPUNI</button>
       <button id="btnClear" class="tab-btn">PRIKAŽI POLJA</button>
       <button id="btnDelete" class="tab-btn danger">OBRIŠI</button>
       <button id="btnTemplates" class="tab-btn">TEMPLEJTI</button>
@@ -24,7 +33,13 @@
 
     <!-- Content -->
     <div class="content">
-      
+
+      <!-- Action bar -->
+      <div class="action-bar">
+        <button id="btnExportCSV" class="btn-secondary">↑ Export CSV</button>
+        <button id="btnImportCSV" class="btn-secondary">↓ Import CSV</button>
+      </div>
+
       <!-- Table header -->
       <div class="table-header">
         <div class="th"></div>
@@ -34,22 +49,19 @@
       </div>
 
       <!-- Rows container -->
-      <div id="rows" class="table-body"></div>
-
-      <!-- Action buttons - bez + Dodaj red -->
-      <div class="actions">
-        <div></div>
-        <div class="csv-group">
-          <button id="btnExportCSV" class="btn-secondary">Export CSV</button>
-          <button id="btnImportCSV" class="btn-secondary">Import CSV</button>
+      <div id="rows" class="table-body">
+        <div class="empty-state">
+          <div class="empty-icon">📄</div>
+          <div>Nema učitanih polja.</div>
         </div>
       </div>
 
       <!-- Help text -->
       <div class="help">
-        <strong>⋮⋮ PREVUCI:</strong> uhvati handle i prevuci red gore/dole da promeniš redosled.<br>
-        <strong>POPUNI:</strong> upiši vrednosti u tabelu i klikni POPUNI.<br>
-        <strong>PRIKAŽI POLJA:</strong> vraća {POLJE}. <strong>OBRIŠI:</strong> uklanja kontrole, ostavlja tekst.
+        <strong>⋮⋮ PREVUCI</strong> – promeni redosled polja<br>
+        <strong>POPUNI</strong> – upiši vrednosti i klikni POPUNI<br>
+        <strong>PRIKAŽI POLJA</strong> – vraća {POLJE} placeholder<br>
+        <strong>OBRIŠI</strong> – uklanja kontrole, ostavlja tekst
       </div>
 
     </div>
@@ -58,21 +70,15 @@
 
   <!-- ========== MODAL (Format/Tip polja) ========== -->
   <div id="modalBackdrop" class="modal-backdrop hidden"></div>
-  
   <div id="modal" class="modal-dialog hidden">
     <div class="modal-header">
       <h3>Podešavanja polja</h3>
       <button id="btnModalClose" class="modal-close">×</button>
     </div>
-
     <div class="modal-body">
-      
-      <!-- Field name -->
       <div class="field-name-box">
         <span id="modalFieldName" class="field-name-pill"></span>
       </div>
-
-      <!-- Type selection (radio buttons) -->
       <div class="form-group">
         <label class="form-label">Tip podatka:</label>
         <div class="radio-group">
@@ -90,16 +96,12 @@
           </label>
         </div>
       </div>
-
-      <!-- Format selection -->
       <div class="form-group">
         <label class="form-label" for="formatSelect">Format:</label>
         <select id="formatSelect" class="form-select"></select>
         <div id="formatHint" class="format-hint"></div>
       </div>
-
     </div>
-
     <div class="modal-footer">
       <button id="btnModalCancel" class="btn-secondary">Otkaži</button>
       <button id="btnModalOk" class="btn-primary">OK</button>
@@ -108,13 +110,11 @@
 
   <!-- ========== MODAL (Delete Confirmation) ========== -->
   <div id="deleteModalBackdrop" class="modal-backdrop hidden"></div>
-  
   <div id="deleteModal" class="modal-dialog hidden">
     <div class="modal-header">
       <h3>Potvrda brisanja polja</h3>
       <button id="btnDeleteModalClose" class="modal-close">×</button>
     </div>
-
     <div class="modal-body">
       <p style="margin-bottom: 16px; color: #6b7280; line-height: 1.6;">
         Da li sigurno želite da uklonite sva aktivna polja iz dokumenta?
@@ -123,10 +123,9 @@
         Tekst će ostati sačuvan u dokumentu.
       </p>
     </div>
-
     <div class="modal-footer">
       <button id="btnDeleteCancel" class="btn-secondary">Otkaži</button>
-      <button id="btnDeleteConfirm" class="btn-primary" style="background: #dc2626;">Obriši polja</button>
+      <button id="btnDeleteConfirm" class="btn-primary" style="background:#dc2626;">Obriši polja</button>
     </div>
   </div>
 

@@ -306,7 +306,7 @@ function renderRows() {
   container.innerHTML = "";
 
   if (rows.length === 0) {
-    container.innerHTML = '<div class="empty-state">Nema polja. Klikni "+ Dodaj red".</div>';
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📄</div><div>Nema učitanih polja.</div></div>';
     return;
   }
 
@@ -411,24 +411,7 @@ function renderRows() {
     const btnEdit = document.createElement("button");
     btnEdit.innerHTML = "⚙";
     btnEdit.title = "Podešavanja (tip, format)";
-    btnEdit.style.marginRight = "4px";
-    btnEdit.style.width = "36px";
-    btnEdit.style.height = "36px";
-    btnEdit.style.border = "none";
-    btnEdit.style.background = "#e0f2fe";
-    btnEdit.style.color = "#0369a1";
-    btnEdit.style.fontSize = "18px";
-    btnEdit.style.cursor = "pointer";
-    btnEdit.style.borderRadius = "6px";
-    btnEdit.style.transition = "all 0.2s";
-    btnEdit.addEventListener("mouseover", () => {
-      btnEdit.style.background = "#bae6fd";
-      btnEdit.style.transform = "scale(1.08)";
-    });
-    btnEdit.addEventListener("mouseout", () => {
-      btnEdit.style.background = "#e0f2fe";
-      btnEdit.style.transform = "scale(1)";
-    });
+    btnEdit.className = "btn-settings";
     btnEdit.addEventListener("click", (e) => {
       e.stopPropagation();
       selectedRowIndex = idx;
@@ -2146,10 +2129,17 @@ function bindUi() {
   const btnDeleteCancel = el("btnDeleteCancel");
   const btnDeleteConfirm = el("btnDeleteConfirm");
 
-  if (btnFill) btnFill.addEventListener("click", fillFieldsFromTable);
-  if (btnClear) btnClear.addEventListener("click", clearFieldsKeepControls);
-  if (btnDelete) btnDelete.addEventListener("click", deleteControlsAndXml);
-  if (btnTemplates) btnTemplates.addEventListener("click", openGitHubTemplateModal);
+  // Active tab highlighting
+  const tabBtns = [btnFill, btnClear, btnDelete, btnTemplates];
+  function setActiveTab(active) {
+    tabBtns.forEach(b => { if (b) b.classList.remove("active"); });
+    if (active) active.classList.add("active");
+  }
+
+  if (btnFill) btnFill.addEventListener("click", () => { setActiveTab(btnFill); fillFieldsFromTable(); });
+  if (btnClear) btnClear.addEventListener("click", () => { setActiveTab(btnClear); clearFieldsKeepControls(); });
+  if (btnDelete) btnDelete.addEventListener("click", () => { deleteControlsAndXml(); });
+  if (btnTemplates) btnTemplates.addEventListener("click", () => { setActiveTab(btnTemplates); openGitHubTemplateModal(); });
   if (btnExportCSV) btnExportCSV.addEventListener("click", exportCSV);
   if (btnImportCSV) btnImportCSV.addEventListener("click", importCSV);
 
