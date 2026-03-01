@@ -281,12 +281,12 @@ body {
 /* ========== Help Text ========== */
 .help {
   background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-top: 1px solid #e5e7eb;
   padding: 12px 14px;
   font-size: 12px;
   line-height: 1.9;
   color: #6b7280;
+  flex-shrink: 0;
 }
 
 .help strong { color: #374151; font-weight: 600; }
