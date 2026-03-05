@@ -26,7 +26,7 @@ const FORMAT_OPTIONS = {
     { value: "date:today", label: "Danas (dd.mm.yyyy)", hint: "Primer: 07.02.2025" },
     { value: "date:dd.mm.yyyy", label: "dd.mm.yyyy", hint: "Primer: 07.02.2025" },
     { value: "date:yyyy-mm-dd", label: "yyyy-mm-dd", hint: "Primer: 2025-02-07" },
-    { value: "date:mmmm.yyyy", label: "MMMM.yyyy", hint: "Primer: februar.2025" },
+    { value: "date:mmmm.yyyy", label: "MMMM yyyy", hint: "Primer: februar 2025" },
     { value: "date:dd.mmmm.yyyy", label: "dd.MMMM.yyyy", hint: "Primer: 07.februar.2025" },
   ],
   number: [
@@ -160,7 +160,7 @@ function applyFormat(type, format, rawValue) {
       const yyyy = d.getFullYear();
       
       if (format === "date:mmmm.yyyy") {
-        return `${monthName}.${yyyy}`;
+        return `${monthName} ${yyyy}`;
       } else {
         const dd = String(d.getDate()).padStart(2, "0");
         return `${dd}.${monthName}.${yyyy}`;
