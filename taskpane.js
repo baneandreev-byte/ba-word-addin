@@ -711,6 +711,21 @@ async function fillFieldsFromTable() {
   });
 
   await saveStateToDocument();
+
+  // Ažuriraj Table of Contents
+  try {
+    await Word.run(async (context) => {
+      const fields = context.document.body.fields;
+      fields.load("items");
+      await context.sync();
+
+      fields.items.forEach((f) => f.updateResult());
+      await context.sync();
+      console.log("✅ Sadržaj (TOC) ažuriran");
+    });
+  } catch (e) {
+    console.warn("⚠️ Ažuriranje sadržaja nije uspelo:", e);
+  }
 }
 
 async function clearFieldsKeepControls() {

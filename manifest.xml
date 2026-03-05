@@ -6,12 +6,12 @@
   xsi:type="TaskPaneApp">
 
   <!-- ============================================ -->
-  <!-- VERZIJA: 1.0.0.74 - Fix datum format -->
+  <!-- VERZIJA: 1.0.0.75 - Auto update TOC -->
   <!-- Datum: 2026-03-05 -->
   <!-- ============================================ -->
 
   <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
-  <Version>1.0.0.74</Version>
+  <Version>1.0.0.75</Version>
   <ProviderName>BiroA</ProviderName>
   <DefaultLocale>sr-RS</DefaultLocale>
 
@@ -112,7 +112,7 @@
 
 
     <!-- ============================================ -->
-    <!-- GRAPH API SSO V74 -->
+    <!-- GRAPH API SSO V75 -->
     <!-- ============================================ -->
     <WebApplicationInfo>
       <Id>54bfb8d7-61fe-4a63-898d-0e7f6e51e51b</Id>
