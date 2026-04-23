@@ -580,104 +580,159 @@ function xmlEscape(s) {
 
 function buildStateXml() {
   let xml = `<state xmlns="${XML_NS}">`;
-  for (const r of rows) {
+  rows.forEach((r, idx) => {
+    const id = xmlEscape(r.id || crypto.randomUUID());
     const f = xmlEscape(r.field || "");
     const v = xmlEscape(r.value || "");
     const t = xmlEscape(r.type || "text");
     const fmt = xmlEscape(r.format || "text:auto");
-    xml += `<item field="${f}" value="${v}" type="${t}" format="${fmt}"/>`;
-  }
+    xml += `<item id="${id}" order="${idx}" field="${f}" value="${v}" type="${t}" format="${fmt}"/>`;
+  });
   xml += "</state>";
   return xml;
 }
 
+function parseStateXml(str) {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(str, "text/xml");
+    if (!doc.querySelector("parsererror")) {
+      const nodes = doc.querySelectorAll("item");
+      if (nodes.length > 0) {
+        const items = [];
+        nodes.forEach((node) => {
+          items.push({
+            id: node.getAttribute("id") || crypto.randomUUID(),
+            order: parseInt(node.getAttribute("order") ?? "0", 10),
+            field: node.getAttribute("field") || "",
+            value: node.getAttribute("value") || "",
+            type: node.getAttribute("type") || "text",
+            format: node.getAttribute("format") || "text:auto",
+          });
+        });
+        items.sort((a, b) => a.order - b.order);
+        return items;
+      }
+    }
+  } catch (e) {
+    console.warn("⚠️ DOMParser nije uspeo, fallback na regex:", e);
+  }
+  return parseStateXmlRegexFallback(str);
+}
+
+function parseStateXmlRegexFallback(str) {
+  const items = [];
+  const re = /<item\s+([\s\S]*?)\s*\/>/g;
+  let m;
+  while ((m = re.exec(str))) {
+    const attrs = m[1];
+    const get = (name) => {
+      const rm = new RegExp(`${name}="([^"]*)"`);
+      const mm = rm.exec(attrs);
+      if (!mm) return "";
+      return mm[1]
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&gt;/g, ">")
+        .replace(/&lt;/g, "<")
+        .replace(/&amp;/g, "&");
+    };
+    items.push({
+      id: get("id") || crypto.randomUUID(),
+      field: get("field"),
+      value: get("value"),
+      type: get("type") || "text",
+      format: get("format") || "text:auto",
+    });
+  }
+  return items;
+}
+
 async function saveStateToDocument() {
   const xml = buildStateXml();
-
-  await Word.run(async (context) => {
-    const parts = context.document.customXmlParts;
-    parts.load("items");
-    await context.sync();
-
-    for (const p of parts.items) {
-      p.load("namespaceUri");
-    }
-    await context.sync();
-
-    for (const p of parts.items) {
-      if (p.namespaceUri === XML_NS) p.delete();
-    }
-    await context.sync();
-
-    context.document.customXmlParts.add(xml);
-    await context.sync();
-  });
+  try {
+    await Word.run(async (context) => {
+      try {
+        const byNs = context.document.customXmlParts.getByNamespace(XML_NS);
+        byNs.load("items");
+        await context.sync();
+        for (const p of byNs.items) p.delete();
+        await context.sync();
+      } catch (e) {
+        const parts = context.document.customXmlParts;
+        parts.load("items");
+        await context.sync();
+        for (const p of parts.items) p.load("namespaceUri");
+        await context.sync();
+        for (const p of parts.items) {
+          if (p.namespaceUri === XML_NS) p.delete();
+        }
+        await context.sync();
+      }
+      context.document.customXmlParts.add(xml);
+      await context.sync();
+    });
+  } catch (e) {
+    console.error("❌ saveStateToDocument greška:", e);
+  }
 }
 
 async function loadStateFromDocument() {
   await Word.run(async (context) => {
-    const parts = context.document.customXmlParts;
-    parts.load("items");
-    await context.sync();
+    let mine = null;
 
-    for (const p of parts.items) {
-      p.load("namespaceUri");
+    try {
+      const byNs = context.document.customXmlParts.getByNamespace(XML_NS);
+      byNs.load("items");
+      await context.sync();
+      if (byNs.items.length > 0) mine = byNs.items[0];
+    } catch (e) {
+      console.warn("⚠️ getByNamespace nije uspeo, fallback na iteraciju:", e);
     }
-    await context.sync();
 
-    const mine = parts.items.find((p) => p.namespaceUri === XML_NS);
+    if (!mine) {
+      const parts = context.document.customXmlParts;
+      parts.load("items");
+      await context.sync();
+      for (const p of parts.items) p.load("namespaceUri");
+      await context.sync();
+      mine = parts.items.find((p) => p.namespaceUri === XML_NS) || null;
+    }
+
     if (!mine) return;
 
     const xml = mine.getXml();
     await context.sync();
 
-    const str = xml.value || "";
-    const items = [];
-    const re = /<item\s+([^/>]+?)\s*\/>/g;
-    let m;
-    while ((m = re.exec(str))) {
-      const attrs = m[1];
-      const get = (name) => {
-        const rm = new RegExp(`${name}="([^"]*)"`);
-        const mm = rm.exec(attrs);
-        if (!mm) return "";
-        return mm[1]
-          .replace(/&quot;/g, '"')
-          .replace(/&apos;/g, "'")
-          .replace(/&gt;/g, ">")
-          .replace(/&lt;/g, "<")
-          .replace(/&amp;/g, "&");
-      };
-      items.push({
-        field: get("field"),
-        value: get("value"),
-        type: get("type") || "text",
-        format: get("format") || "text:auto",
-      });
-    }
-
-    if (items.length) {
-      rows = items;
-    }
+    const items = parseStateXml(xml.value || "");
+    if (items.length) rows = items;
   });
 }
 
 async function deleteSavedStateFromDocument() {
-  await Word.run(async (context) => {
-    const parts = context.document.customXmlParts;
-    parts.load("items");
-    await context.sync();
-
-    for (const p of parts.items) {
-      p.load("namespaceUri");
-    }
-    await context.sync();
-
-    for (const p of parts.items) {
-      if (p.namespaceUri === XML_NS) p.delete();
-    }
-    await context.sync();
-  });
+  try {
+    await Word.run(async (context) => {
+      try {
+        const byNs = context.document.customXmlParts.getByNamespace(XML_NS);
+        byNs.load("items");
+        await context.sync();
+        for (const p of byNs.items) p.delete();
+        await context.sync();
+      } catch (e) {
+        const parts = context.document.customXmlParts;
+        parts.load("items");
+        await context.sync();
+        for (const p of parts.items) p.load("namespaceUri");
+        await context.sync();
+        for (const p of parts.items) {
+          if (p.namespaceUri === XML_NS) p.delete();
+        }
+        await context.sync();
+      }
+    });
+  } catch (e) {
+    console.error("❌ deleteSavedStateFromDocument greška:", e);
+  }
 }
 
 // ---------- Word operations ----------
@@ -1720,6 +1775,9 @@ async function loadTemplatesFromDocument() {
       parts.load("items");
       await context.sync();
 
+      for (const p of parts.items) p.load("namespaceUri");
+      await context.sync();
+
       const targetNamespace = "http://biroa.com/word-addin/templates";
       const targetParts = parts.items.filter(
         (p) => p.namespaceUri === targetNamespace
@@ -1771,6 +1829,9 @@ async function saveTemplatesToDocument() {
     await Word.run(async (context) => {
       const parts = context.document.customXmlParts;
       parts.load("items");
+      await context.sync();
+
+      for (const p of parts.items) p.load("namespaceUri");
       await context.sync();
 
       const targetNamespace = "http://biroa.com/word-addin/templates";
