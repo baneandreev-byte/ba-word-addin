@@ -407,7 +407,20 @@ function renderRows() {
     // Actions column
     const actionsCell = document.createElement("div");
     actionsCell.className = "del";
-    
+
+    // Oblačić – objašnjenje polja (korisnik vidi opis koji je admin uneo)
+    const btnDesc = document.createElement("button");
+    btnDesc.className = "row-btn describe";
+    btnDesc.innerHTML = "💬";
+    const hasDesc = !!(r.description && r.description.trim());
+    btnDesc.title = hasDesc ? `Objašnjenje: ${r.description}` : "Nema objašnjenja za ovo polje";
+    if (hasDesc) btnDesc.classList.add("has-desc");
+    btnDesc.addEventListener("click", (e) => {
+      e.stopPropagation();
+      selectedRowIndex = idx;
+      openDescView(r);
+    });
+
     const btnEdit = document.createElement("button");
     btnEdit.innerHTML = "⚙";
     btnEdit.title = "Podešavanja (tip, format)";
@@ -418,6 +431,7 @@ function renderRows() {
       openModal(r);
     });
 
+    actionsCell.appendChild(btnDesc);
     actionsCell.appendChild(btnEdit);
 
     row.appendChild(dragHandle);
@@ -586,7 +600,8 @@ function buildStateXml() {
     const v = xmlEscape(r.value || "");
     const t = xmlEscape(r.type || "text");
     const fmt = xmlEscape(r.format || "text:auto");
-    xml += `<item id="${id}" order="${idx}" field="${f}" value="${v}" type="${t}" format="${fmt}"/>`;
+    const desc = xmlEscape(r.description || "");
+    xml += `<item id="${id}" order="${idx}" field="${f}" value="${v}" type="${t}" format="${fmt}" description="${desc}"/>`;
   });
   xml += "</state>";
   return xml;
@@ -608,6 +623,7 @@ function parseStateXml(str) {
             value: node.getAttribute("value") || "",
             type: node.getAttribute("type") || "text",
             format: node.getAttribute("format") || "text:auto",
+            description: node.getAttribute("description") || "",
           });
         });
         items.sort((a, b) => a.order - b.order);
@@ -639,12 +655,16 @@ function parseStateXmlRegexFallback(str) {
     };
     items.push({
       id: get("id") || crypto.randomUUID(),
+      order: parseInt(get("order") || "9999", 10),
       field: get("field"),
       value: get("value"),
       type: get("type") || "text",
       format: get("format") || "text:auto",
+      description: get("description") || "",
     });
   }
+  items.sort((a, b) => a.order - b.order);
+  items.forEach((it) => delete it.order);
   return items;
 }
 
@@ -735,6 +755,183 @@ async function deleteSavedStateFromDocument() {
   }
 }
 
+// ---------- SKENIRAJ: učitaj polja iz dokumenta (kontrole + skriveni XML) ----------
+function isPlaceholderText(text, key) {
+  const t = String(text || "").trim();
+  return t === "" || t === `{${key}}`;
+}
+
+// Parsira state XML i ZADRŽAVA order/description (parseStateXml briše order)
+function parseStateXmlFull(xmlString) {
+  const out = [];
+  try {
+    const doc = new DOMParser().parseFromString(xmlString, "text/xml");
+    if (doc.querySelector("parsererror")) throw new Error("parsererror");
+    doc.querySelectorAll("item").forEach((node, i) => {
+      out.push({
+        id: node.getAttribute("id") || crypto.randomUUID(),
+        order: parseInt(node.getAttribute("order") ?? String(i), 10),
+        field: node.getAttribute("field") || "",
+        value: node.getAttribute("value") || "",
+        type: node.getAttribute("type") || "text",
+        format: node.getAttribute("format") || "text:auto",
+        description: node.getAttribute("description") || "",
+      });
+    });
+  } catch (e) {
+    const re = /<item\s+([\s\S]*?)\s*\/>/g;
+    let m, i = 0;
+    while ((m = re.exec(xmlString))) {
+      const attrs = m[1];
+      const get = (name) => {
+        const mm = new RegExp(`${name}="([^"]*)"`).exec(attrs);
+        if (!mm) return "";
+        return mm[1].replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+          .replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&");
+      };
+      out.push({
+        id: get("id") || crypto.randomUUID(),
+        order: parseInt(get("order") || String(i), 10),
+        field: get("field"),
+        value: get("value"),
+        type: get("type") || "text",
+        format: get("format") || "text:auto",
+        description: get("description") || "",
+      });
+      i++;
+    }
+  }
+  return out;
+}
+
+async function scanDocument() {
+  setStatus("Skeniram dokument...", "info");
+  try {
+    // 1) BA_FIELD kontrole iz tela (tip/format iz taga, vrednost iz teksta)
+    const ccByKey = new Map();
+    const docOrder = [];
+    await Word.run(async (context) => {
+      const ccs = context.document.contentControls;
+      ccs.load("items");
+      await context.sync();
+      for (const cc of ccs.items) cc.load("tag,text");
+      await context.sync();
+
+      for (const cc of ccs.items) {
+        const meta = parseTag(cc.tag || "");
+        if (!meta || ccByKey.has(meta.key)) continue;
+        ccByKey.set(meta.key, { type: meta.type, format: meta.format, text: cc.text || "" });
+        docOrder.push(meta.key);
+      }
+    });
+
+    // 2) Skriveni state XML (order, value, type, format, description)
+    let xmlItems = [];
+    await Word.run(async (context) => {
+      let xmlString = "";
+      try {
+        const byNs = context.document.customXmlParts.getByNamespace(XML_NS);
+        byNs.load("items");
+        await context.sync();
+        if (byNs.items.length > 0) {
+          const x = byNs.items[0].getXml();
+          await context.sync();
+          xmlString = x.value || "";
+        }
+      } catch (e) {
+        const parts = context.document.customXmlParts;
+        parts.load("items");
+        await context.sync();
+        for (const p of parts.items) p.load("namespaceUri");
+        await context.sync();
+        const mine = parts.items.find((p) => p.namespaceUri === XML_NS);
+        if (mine) {
+          const x = mine.getXml();
+          await context.sync();
+          xmlString = x.value || "";
+        }
+      }
+      if (xmlString) xmlItems = parseStateXmlFull(xmlString);
+    });
+
+    // 3) Unija: XML (autoritet za redosled/vrednost/opis) + kontrole iz tela
+    const merged = new Map();
+    for (const it of xmlItems) {
+      if (!it.field) continue;
+      const cc = ccByKey.get(it.field);
+      merged.set(it.field, {
+        id: it.id || crypto.randomUUID(),
+        field: it.field,
+        value: it.value || (cc && !isPlaceholderText(cc.text, it.field) ? cc.text : ""),
+        type: it.type || (cc ? cc.type : "text"),
+        format: it.format || (cc ? cc.format : "text:auto"),
+        description: it.description || "",
+        _ord: it.order,
+      });
+    }
+    let tail = xmlItems.length;
+    for (const key of docOrder) {
+      if (merged.has(key)) continue;
+      const cc = ccByKey.get(key);
+      merged.set(key, {
+        id: crypto.randomUUID(),
+        field: key,
+        value: cc && !isPlaceholderText(cc.text, key) ? cc.text : "",
+        type: cc ? cc.type : "text",
+        format: cc ? cc.format : "text:auto",
+        description: "",
+        _ord: tail++,
+      });
+    }
+
+    const result = Array.from(merged.values()).sort((a, b) => a._ord - b._ord);
+    result.forEach((r) => delete r._ord);
+
+    if (result.length === 0) {
+      setStatus("Nije pronađeno nijedno BA_FIELD polje ni sačuvan XML.", "warn");
+      return;
+    }
+
+    rows = result;
+    selectedRowIndex = null;
+    renderRows();
+    await saveStateToDocument();
+    const orphans = docOrder.filter((k) => !xmlItems.some((it) => it.field === k)).length;
+    setStatus(
+      `Skenirano: ${result.length} polja${orphans ? ` (+${orphans} iz dokumenta)` : ""}.`,
+      "success"
+    );
+  } catch (err) {
+    console.error("❌ Scan greška:", err);
+    setStatus("Greška pri skeniranju dokumenta.", "error");
+  }
+}
+
+// ---------- Prikaz objašnjenja (read-only za korisnika) ----------
+function openDescView(row) {
+  const backdrop = el("descViewBackdrop");
+  const modal = el("descViewModal");
+  const nameEl = el("descViewFieldName");
+  const textEl = el("descViewText");
+  if (!backdrop || !modal) return;
+  if (nameEl) nameEl.textContent = row.field || "(bez naziva)";
+  const t = (row.description || "").trim();
+  if (textEl) {
+    textEl.textContent = t || "Nema objašnjenja za ovo polje.";
+    textEl.style.fontStyle = t ? "normal" : "italic";
+    textEl.style.color = t ? "#374151" : "#9ca3af";
+  }
+  backdrop.classList.remove("hidden");
+  modal.classList.remove("hidden");
+}
+
+function closeDescView() {
+  const backdrop = el("descViewBackdrop");
+  const modal = el("descViewModal");
+  if (backdrop) backdrop.classList.add("hidden");
+  if (modal) modal.classList.add("hidden");
+}
+
 // ---------- Word operations ----------
 async function fillFieldsFromTable() {
   console.log("🔵 fillFieldsFromTable() POZVANA");
@@ -780,6 +977,19 @@ async function fillFieldsFromTable() {
     });
   } catch (e) {
     console.warn("⚠️ Ažuriranje sadržaja nije uspelo:", e);
+  }
+
+  // Snimi dokument na disk (tekst + skriveni XML + TOC u jednom snimanju)
+  try {
+    await Word.run(async (context) => {
+      context.document.save();
+      await context.sync();
+    });
+    console.log("💾 Dokument snimljen na disk");
+    setStatus("Popunjeno i snimljeno.", "success");
+  } catch (e) {
+    console.warn("⚠️ Snimanje nije uspelo (verovatno nesnimljen nov dokument):", e);
+    setStatus("Popunjeno. Dokument još nije snimljen — sačuvaj ručno (Ctrl+S).", "warn");
   }
 }
 
@@ -1156,7 +1366,8 @@ async function importCSV() {
           field, 
           value, 
           type: "text", 
-          format: "text:auto" 
+          format: "text:auto",
+          description: "" 
         });
       }
     }
@@ -2004,6 +2215,7 @@ async function loadTemplate(templateId) {
       value: "",
       type: f.type,
       format: f.format,
+      description: f.description || "",
     }));
     
     renderRows();
@@ -2192,6 +2404,7 @@ function bindUi() {
   const btnClear = el("btnClear");
   const btnDelete = el("btnDelete");
   const btnTemplates = el("btnTemplates");
+  const btnScan = el("btnScan");
   const btnExportCSV = el("btnExportCSV");
   const btnImportCSV = el("btnImportCSV");
 
@@ -2218,6 +2431,19 @@ function bindUi() {
   if (btnTemplates) btnTemplates.addEventListener("click", () => { setActiveTab(btnTemplates); openGitHubTemplateModal(); });
   if (btnExportCSV) btnExportCSV.addEventListener("click", exportCSV);
   if (btnImportCSV) btnImportCSV.addEventListener("click", importCSV);
+  if (btnScan) btnScan.addEventListener("click", scanDocument);
+
+  // Description view modal (read-only)
+  const btnDescViewClose = el("btnDescViewClose");
+  const btnDescViewOk = el("btnDescViewOk");
+  const descViewBackdrop = el("descViewBackdrop");
+  const descViewModal = el("descViewModal");
+  if (btnDescViewClose) btnDescViewClose.addEventListener("click", closeDescView);
+  if (btnDescViewOk) btnDescViewOk.addEventListener("click", closeDescView);
+  if (descViewModal) descViewModal.addEventListener("click", (e) => e.stopPropagation());
+  if (descViewBackdrop) descViewBackdrop.addEventListener("click", (e) => {
+    if (e.target === descViewBackdrop) closeDescView();
+  });
 
   if (btnModalClose) btnModalClose.addEventListener("click", closeModal);
   if (btnModalCancel) btnModalCancel.addEventListener("click", closeModal);
